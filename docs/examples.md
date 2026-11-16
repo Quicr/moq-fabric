@@ -166,7 +166,7 @@ peers.SetDelegate(nullptr);
 
 `OnPeerData` is left at the empty default. A relay that does not call `Subscribe` has no local subscription, so object bytes are forwarded to other peers and are not delivered to this delegate.
 
-`Config::node_type` is copied into the node information advertised on each session. The current library forwards announces, subscribes, and datagrams for `kEdge`, `kVia`, and `kStub` alike. The type tells peers the role. The protocol's rule that an edge rewrites a stub as itself, so the rest of the network never learns the stub, is described in [relay-protocol.md](relay-protocol.md) and is not what this binary does.
+`Config::node_type` is copied into the node information advertised on each session. The library forwards announces, subscribes, and objects for `kEdge`, `kVia`, and `kStub` alike. The type tells peers the role. [relay-protocol.md](relay-protocol.md) describes that behavior.
 
 `check_interval_ms` is set to `2000`, the shortest interval the library accepts. Disconnected peers are dialed again on that interval. Shutdown waits about half of it for the check thread.
 

@@ -27,6 +27,7 @@ add_executable(moq_peering_test
     peering_data_header.cc
     peering_info_base.cc
     peering_integration.cc
+    peering_name.cc
 )
 target_include_directories(moq_peering_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src)
 target_link_libraries(moq_peering_test PRIVATE moq-peering doctest::doctest OpenSSL::Crypto)

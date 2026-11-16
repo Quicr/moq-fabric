@@ -286,7 +286,7 @@ const auto camera = MakeTrack("demo", "camera-1");
 const auto track_hash = moq::peering::PeerManager::HashTrack(camera);
 ```
 
-`HashTrack` is the full-name hash used by `SendData`, `Unsubscribe`, `HasSubscribers`, and the delegate. It is CityHash64 of the concatenated namespace tuples, CityHash64 of the name bytes, then those two values combined. An empty name hashes as CityHash64 of zero bytes. The same bytes produce the same hash as LAPS with libquicr. Call `HashTrack` rather than recomputing it.
+`HashTrack` is the full-name hash used by `SendData`, `Unsubscribe`, `HasSubscribers`, and the delegate. The namespace hash is CityHash64 of the first tuple. Each following value is CityHash64 of the previous hash, written as 8 big-endian bytes, followed by the next tuple. An empty namespace hashes as CityHash64 of zero bytes. The name hash is CityHash64 of the name bytes. An empty name hashes as CityHash64 of zero bytes. Those two values are then combined. A namespace of one tuple is CityHash64 of that tuple, which matches LAPS with libquicr. Call `HashTrack` rather than recomputing it.
 
 A namespace may contain more than one tuple. Order is significant.
 

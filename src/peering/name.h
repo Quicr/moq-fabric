@@ -65,8 +65,12 @@ namespace moq::peering {
         const std::vector<uint64_t>& GetHashes() const noexcept { return hashes_; }
         std::size_t size() const noexcept { return bytes_.size(); }
 
-        /// Hash of the concatenated tuples. Empty is the CityHash of zero bytes.
-        uint64_t Hash() const { return hash(std::span<const uint8_t>(bytes_.data(), bytes_.size())); }
+        /// Ordered hash of the tuples.
+        ///
+        /// An empty namespace is the CityHash of zero bytes. One tuple is the
+        /// CityHash of that tuple. Each later value is the CityHash of the
+        /// previous hash, as 8 big-endian bytes, followed by the next tuple.
+        uint64_t Hash() const noexcept { return hash_; }
 
         friend bool operator==(const NameSpace& lhs, const NameSpace& rhs) noexcept
         {
@@ -102,12 +106,36 @@ namespace moq::peering {
                 hashes_.push_back(hash(std::span<const uint8_t>(entry.data(), entry.size())));
                 offset += entry.size();
             }
+
+            if (hashes_.empty()) {
+                hash_ = hash(std::span<const uint8_t>{});
+                return;
+            }
+
+            hash_ = hashes_.front();
+            for (std::size_t i = 1; i < spans_.size(); ++i) {
+                hash_ = HashPreviousAndTuple(hash_, spans_[i]);
+            }
+        }
+
+        /// CityHash of `previous` in big-endian followed by `tuple`.
+        static uint64_t HashPreviousAndTuple(uint64_t previous, std::span<const uint8_t> tuple)
+        {
+            std::vector<uint8_t> material(sizeof(previous) + tuple.size());
+            for (std::size_t i = 0; i < sizeof(previous); ++i) {
+                material[i] = static_cast<uint8_t>(previous >> (56 - (8 * i)));
+            }
+            for (std::size_t i = 0; i < tuple.size(); ++i) {
+                material[sizeof(previous) + i] = tuple[i];
+            }
+            return hash(std::span<const uint8_t>(material.data(), material.size()));
         }
 
         std::vector<std::vector<uint8_t>> entries_;
         std::vector<uint8_t> bytes_;
         std::vector<std::span<const uint8_t>> spans_;
         std::vector<uint64_t> hashes_;
+        uint64_t hash_{ hash(std::span<const uint8_t>{}) };
     };
 
     struct FullName
