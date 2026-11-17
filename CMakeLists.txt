@@ -5,9 +5,9 @@ cmake_minimum_required(VERSION 3.16)
 
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
-project(moq-peering
+project(moq-fabric
         VERSION 0.1.0
-        DESCRIPTION "C++ library for Media Over QUIC (MoQ) relay peering"
+        DESCRIPTION "C++ library for a Media Over QUIC (MoQ) relay fabric"
         LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -15,18 +15,18 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
-    set(MOQ_PEERING_IS_TOP_LEVEL ON)
+    set(MOQ_FABRIC_IS_TOP_LEVEL ON)
 endif()
 
 # Off when LAPS (or another parent) adds this project. On for a standalone build.
 # A parent can still turn either one on.
-if(MOQ_PEERING_IS_TOP_LEVEL)
-    set(_moq_peering_build_extra_default ON)
+if(MOQ_FABRIC_IS_TOP_LEVEL)
+    set(_moq_fabric_build_extra_default ON)
 else()
-    set(_moq_peering_build_extra_default OFF)
+    set(_moq_fabric_build_extra_default OFF)
 endif()
-option(MOQ_PEERING_BUILD_TESTS "Build moq-peering tests" ${_moq_peering_build_extra_default})
-option(MOQ_PEERING_BUILD_EXAMPLES "Build moq-peering examples" ${_moq_peering_build_extra_default})
+option(MOQ_FABRIC_BUILD_TESTS "Build moq-fabric tests" ${_moq_fabric_build_extra_default})
+option(MOQ_FABRIC_BUILD_EXAMPLES "Build moq-fabric examples" ${_moq_fabric_build_extra_default})
 
 list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(CPM)
@@ -95,52 +95,52 @@ if(NOT TARGET spdlog::spdlog)
     CPMAddPackage("gh:gabime/spdlog@1.17.0")
 endif()
 
-add_library(moq-peering STATIC
+add_library(moq-fabric STATIC
     src/peer_manager.cc
-    src/peering/engine.cc
-    src/peering/peer_session.cc
-    src/peering/quic_transport.cc
-    src/peering/forwarding_base.cc
-    src/peering/messages/connect.cc
-    src/peering/messages/connect_response.cc
-    src/peering/messages/info_base.cc
-    src/peering/messages/node_info.cc
-    src/peering/messages/subscribe_node_set.cc
-    src/peering/messages/data_header.cc
+    src/fabric/engine.cc
+    src/fabric/peer_session.cc
+    src/fabric/quic_transport.cc
+    src/fabric/forwarding_base.cc
+    src/fabric/messages/connect.cc
+    src/fabric/messages/connect_response.cc
+    src/fabric/messages/info_base.cc
+    src/fabric/messages/node_info.cc
+    src/fabric/messages/subscribe_node_set.cc
+    src/fabric/messages/data_header.cc
 )
-add_library(moq::peering ALIAS moq-peering)
+add_library(moq::fabric ALIAS moq-fabric)
 
-target_include_directories(moq-peering
+target_include_directories(moq-fabric
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-target_link_libraries(moq-peering PUBLIC picoquic-core spdlog::spdlog)
+target_link_libraries(moq-fabric PUBLIC picoquic-core spdlog::spdlog)
 
 # Static picoquic calls Winsock and IP Helper. Those imports are resolved when
 # the final executable is linked, so they have to travel with this library.
 if(WIN32)
-    target_link_libraries(moq-peering PUBLIC ws2_32 iphlpapi crypt32 bcrypt)
+    target_link_libraries(moq-fabric PUBLIC ws2_32 iphlpapi crypt32 bcrypt)
 endif()
 
-target_compile_options(moq-peering
+target_compile_options(moq-fabric
     PRIVATE
     $<$<OR:$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>,$<CXX_COMPILER_ID:GNU>>:-Wall -Wextra -Wpedantic>
 )
 
-set_target_properties(moq-peering PROPERTIES
+set_target_properties(moq-fabric PROPERTIES
     CXX_STANDARD 20
     CXX_STANDARD_REQUIRED YES
     CXX_EXTENSIONS OFF
 )
 
-if(MOQ_PEERING_BUILD_EXAMPLES)
+if(MOQ_FABRIC_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
 
-if(MOQ_PEERING_BUILD_TESTS)
+if(MOQ_FABRIC_BUILD_TESTS)
     enable_testing()
     add_subdirectory(test)
 endif()

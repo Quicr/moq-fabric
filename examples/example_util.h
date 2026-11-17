@@ -2,14 +2,14 @@
 // SPDX-License-Identifier: BSD-2-Clause
 #pragma once
 
-#include <moq/peering/peer_manager.h>
+#include <moq/fabric/peer_manager.h>
 
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
-namespace moq::peering::examples {
+namespace moq::fabric::examples {
 
     enum class ExampleKind
     {
@@ -54,4 +54,4 @@ namespace moq::peering::examples {
 
     void WaitForInterrupt();
 
-} // namespace moq::peering::examples
+} // namespace moq::fabric::examples

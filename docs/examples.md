@@ -1,14 +1,14 @@
 # Example programs
 
-`examples/` builds three processes that speak the peering protocol to each other. They do not open a Media Over QUIC (MoQ) session. A real application, such as LAPS, implements MoQ and uses the same `PeerManager` and `Delegate` calls these programs use.
+`examples/` builds three processes that speak the fabric protocol to each other. They do not open a Media Over QUIC (MoQ) session. A real application, such as LAPS, implements MoQ and uses the same `PeerManager` and `Delegate` calls these programs use.
 
 The library reference is [api.md](api.md). The wire protocol is [relay-protocol.md](relay-protocol.md).
 
 | Binary | Source | Role |
 | --- | --- | --- |
-| `moq_peering_relay` | `examples/relay.cc` | Edge, via, or stub. Forwards announces, subscribes, and objects. |
-| `moq_peering_producer` | `examples/producer.cc` | Stub that dials a relay, announces one track, and publishes datagrams when a peer subscribes. |
-| `moq_peering_subscriber` | `examples/subscriber.cc` | Stub that dials a relay, subscribes to one track, and prints objects. |
+| `moq_fabric_relay` | `examples/relay.cc` | Edge, via, or stub. Forwards announces, subscribes, and objects. |
+| `moq_fabric_producer` | `examples/producer.cc` | Stub that dials a relay, announces one track, and publishes datagrams when a peer subscribes. |
+| `moq_fabric_subscriber` | `examples/subscriber.cc` | Stub that dials a relay, subscribes to one track, and prints objects. |
 
 Shared command-line parsing, certificate checks, and `Config` setup live in `examples/example_util.cc`.
 
@@ -16,10 +16,10 @@ Shared command-line parsing, certificate checks, and `Config` setup live in `exa
 
 ```sh
 cmake -S . -B build
-cmake --build build --target moq_peering_relay moq_peering_producer moq_peering_subscriber
+cmake --build build --target moq_fabric_relay moq_fabric_producer moq_fabric_subscriber
 ```
 
-The binaries are `build/examples/moq_peering_relay`, `build/examples/moq_peering_producer`, and `build/examples/moq_peering_subscriber`. `make build` builds them together with the library and tests. `--help` or `-h` prints the flags for that binary.
+The binaries are `build/examples/moq_fabric_relay`, `build/examples/moq_fabric_producer`, and `build/examples/moq_fabric_subscriber`. `make build` builds them together with the library and tests. `--help` or `-h` prints the flags for that binary.
 
 ## Certificates
 
@@ -52,15 +52,15 @@ The library loads the same paths into the QUIC stack and presents that certifica
 Run each command in its own terminal. Ctrl-C or `SIGTERM` stops that process.
 
 ```sh
-./build/examples/moq_peering_relay \
+./build/examples/moq_fabric_relay \
   --cert build/server-cert.pem --key build/server-key.pem \
   --listen 33434
 
-./build/examples/moq_peering_producer \
+./build/examples/moq_fabric_producer \
   --cert build/server-cert.pem --key build/server-key.pem \
   --peer 127.0.0.1:33434
 
-./build/examples/moq_peering_subscriber \
+./build/examples/moq_fabric_subscriber \
   --cert build/server-cert.pem --key build/server-key.pem \
   --peer 127.0.0.1:33434
 ```
@@ -80,19 +80,19 @@ Start the processes in any order. An announce or a subscribe made before the QUI
 The via dials the edge. Point the subscriber at the via. The producer can dial either relay. This layout sends the subscriber through the via:
 
 ```sh
-./build/examples/moq_peering_relay \
+./build/examples/moq_fabric_relay \
   --cert build/server-cert.pem --key build/server-key.pem \
   --type edge --listen 33434 --node-id edge
 
-./build/examples/moq_peering_relay \
+./build/examples/moq_fabric_relay \
   --cert build/server-cert.pem --key build/server-key.pem \
   --type via --listen 33435 --peer 127.0.0.1:33434 --node-id via
 
-./build/examples/moq_peering_producer \
+./build/examples/moq_fabric_producer \
   --cert build/server-cert.pem --key build/server-key.pem \
   --peer 127.0.0.1:33434 --listen 33450
 
-./build/examples/moq_peering_subscriber \
+./build/examples/moq_fabric_subscriber \
   --cert build/server-cert.pem --key build/server-key.pem \
   --peer 127.0.0.1:33435 --listen 33451
 ```
@@ -110,16 +110,16 @@ The via log shows the announce and the subscribe. It does not print `received`, 
 
 ## A stub relay
 
-`--type stub` on `moq_peering_relay` advertises `NodeType::kStub` and dials the peers you pass. In the protocol, a stub is a child of an edge: it dials that edge, and other relays dial the edge. The producer and subscriber binaries are stubs in that sense. They dial the relay, and the relay is not given their listen port.
+`--type stub` on `moq_fabric_relay` advertises `NodeType::kStub` and dials the peers you pass. In the protocol, a stub is a child of an edge: it dials that edge, and other relays dial the edge. The producer and subscriber binaries are stubs in that sense. They dial the relay, and the relay is not given their listen port.
 
 `PeerManager` binds `listen_port` for every node type, including a stub. These examples still listen. Leave the producer and subscriber ports undialed.
 
-## moq_peering_relay
+## moq_fabric_relay
 
-Forwards peering state. It never calls `Announce`, `Subscribe`, or `SendData`.
+Forwards announcements, subscribes, and objects. It never calls `Announce`, `Subscribe`, or `SendData`.
 
 ```text
-moq_peering_relay --cert FILE --key FILE [--node-id ID] [--type edge|via|stub]
+moq_fabric_relay --cert FILE --key FILE [--node-id ID] [--type edge|via|stub]
                   [--listen PORT] [--peer HOST:PORT]...
 ```
 
@@ -147,7 +147,7 @@ An empty `--peer` list means this process only accepts connections. Repeat `--pe
 `main` maps the flags onto `Config` and starts one `PeerManager`. Construction binds the UDP port and dials every peer. The delegate is registered after construction, then cleared before the manager is destroyed.
 
 ```cpp
-moq::peering::PeerManager peers(config);
+moq::fabric::PeerManager peers(config);
 peers.SetDelegate(&app);
 // run until SIGINT or SIGTERM
 peers.SetDelegate(nullptr);
@@ -170,12 +170,12 @@ peers.SetDelegate(nullptr);
 
 `check_interval_ms` is set to `2000`, the shortest interval the library accepts. Disconnected peers are dialed again on that interval. Shutdown waits about half of it for the check thread.
 
-## moq_peering_producer
+## moq_fabric_producer
 
 Dials one or more relays as `NodeType::kStub`, announces one track, and publishes a datagram when `OnPeerSubscribe` runs for that track. A background thread sends another datagram on each interval while any subscriber remains.
 
 ```text
-moq_peering_producer --cert FILE --key FILE --peer HOST:PORT
+moq_fabric_producer --cert FILE --key FILE --peer HOST:PORT
                      [--node-id ID] [--listen PORT]
                      [--namespace TEXT] [--track TEXT]
                      [--interval-ms N] [--payload TEXT]
@@ -197,7 +197,7 @@ moq_peering_producer --cert FILE --key FILE --peer HOST:PORT
 The subscriber must use the same `--namespace` and `--track`. A second producer of a different track can share the relay:
 
 ```sh
-./build/examples/moq_peering_producer \
+./build/examples/moq_fabric_producer \
   --cert build/server-cert.pem --key build/server-key.pem \
   --peer 127.0.0.1:33434 --listen 33452 --node-id camera \
   --namespace room --track video --payload frame --interval-ms 40
@@ -209,7 +209,7 @@ The track is one namespace tuple plus a name. `HashTrack` is the full-name hash 
 
 ```cpp
 const auto track = MakeTrack(name_space, track_name); // name_space = {"demo"}, name = "object"
-const auto track_hash = moq::peering::PeerManager::HashTrack(track);
+const auto track_hash = moq::fabric::PeerManager::HashTrack(track);
 ```
 
 Order in `main`:
@@ -235,13 +235,13 @@ Order in `main`:
 peers->SendData(track_hash,
                 priority,
                 /*ttl_ms=*/1000,
-                moq::peering::DataType::kDatagram,
+                moq::fabric::DataType::kDatagram,
                 /*group_id=*/sequence,
                 /*subgroup_id=*/0,
                 payload);
 ```
 
-`payload` is `std::shared_ptr<const std::vector<uint8_t>>` holding `hello 1`, `hello 2`, and so on. The library adds the peering header. `group_id` is that sequence number. Datagram delivery does not use the group or subgroup to select a stream. `SendData` with no current subscriber does nothing.
+`payload` is `std::shared_ptr<const std::vector<uint8_t>>` holding `hello 1`, `hello 2`, and so on. The library adds the fabric header. `group_id` is that sequence number. Datagram delivery does not use the group or subgroup to select a stream. `SendData` with no current subscriber does nothing.
 
 `OnPeerUnsubscribe` clears the publishing flag only when `subscribers_remain` is false. One subscriber leaving while another remains keeps the interval loop running.
 
@@ -258,12 +258,12 @@ Shutdown order matters because the interval thread calls `SendData`:
 
 Do not destroy the manager or the delegate from inside `OnPeerSubscribe`.
 
-## moq_peering_subscriber
+## moq_fabric_subscriber
 
 Dials one or more relays as `NodeType::kStub`, subscribes to one track, and prints each object payload.
 
 ```text
-moq_peering_subscriber --cert FILE --key FILE --peer HOST:PORT
+moq_fabric_subscriber --cert FILE --key FILE --peer HOST:PORT
                        [--node-id ID] [--listen PORT]
                        [--namespace TEXT] [--track TEXT]
 ```
@@ -290,7 +290,7 @@ moq_peering_subscriber --cert FILE --key FILE --peer HOST:PORT
 | `new_group_request_id` | unset | The subscriber is not asking for a new group. |
 
 ```cpp
-moq::peering::SubscribeParams params;
+moq::fabric::SubscribeParams params;
 params.priority = 10;
 params.delivery_timeout_ms = 1000;
 params.forward = 1;
@@ -342,7 +342,7 @@ The binaries cover announce, subscribe, datagram `SendData`, and the delegate ca
 | `private key does not match the certificate` | `--key` is a different key, or the PEM is encrypted. |
 | `pass --peer host:port` | The producer or subscriber has nobody to dial. |
 | `picoquic network thread failed to bind` | `--listen` is already taken. Pick another port. |
-| `Failed to resolve peering peer` | `--peer` host does not resolve. |
+| `Failed to resolve peer` | `--peer` host does not resolve. |
 | `Failed to create picoquic context; check the certificate and key files` | The library could not load the pair. The example check normally reports the specific problem first. |
 
 `Announce`, `Subscribe`, and `SendData` do not throw when the peer is not up yet or when nobody is subscribed. They update local state, or they do nothing, until a session and a subscribe exist.

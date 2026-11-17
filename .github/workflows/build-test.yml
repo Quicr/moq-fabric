@@ -44,7 +44,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          args=(-S . -B build -DMOQ_PEERING_BUILD_TESTS=ON -DMOQ_PEERING_BUILD_EXAMPLES=ON)
+          args=(-S . -B build -DMOQ_FABRIC_BUILD_TESTS=ON -DMOQ_FABRIC_BUILD_EXAMPLES=ON)
           case "${{ inputs.platform }}" in
             Ubuntu)
               args+=(-G Ninja -DCMAKE_BUILD_TYPE=Release)

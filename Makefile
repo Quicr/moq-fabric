@@ -8,7 +8,7 @@ BUILD_JOBS ?= 4
 BUILD_DIR ?= build
 CLANG_FORMAT = clang-format -i
 
-PROJECTNAME := moq-peering
+PROJECTNAME := moq-fabric
 
 .PHONY: all build build-prep clean cclean test cert format help
 
@@ -28,7 +28,7 @@ help: Makefile
 all: build
 
 build-prep: CMakeLists.txt
-	cmake -S . -B${BUILD_DIR} -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_BUILD_TYPE=Release -DMOQ_PEERING_BUILD_TESTS=ON -DMOQ_PEERING_BUILD_EXAMPLES=ON
+	cmake -S . -B${BUILD_DIR} -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_BUILD_TYPE=Release -DMOQ_FABRIC_BUILD_TESTS=ON -DMOQ_FABRIC_BUILD_EXAMPLES=ON
 
 ## build: Build the library, tests, and examples
 build: build-prep

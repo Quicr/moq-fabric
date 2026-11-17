@@ -1,0 +1,227 @@
+// SPDX-FileCopyrightText: Copyright (c) 2024 Cisco Systems
+// SPDX-License-Identifier: BSD-2-Clause
+#pragma once
+
+#include <atomic>
+#include <map>
+#include <optional>
+#include <set>
+#include <vector>
+
+#include "messages/announce_info.h"
+#include "messages/data_header.h"
+#include "messages/node_info.h"
+#include "messages/subscribe_info.h"
+#include "messages/subscribe_node_set.h"
+#include "quic_transport.h"
+#include <moq/fabric/types.h>
+
+namespace moq::fabric {
+
+    class Engine;
+
+    /**
+     * @brief One relay-to-relay session
+     */
+    class PeerSession : public std::enable_shared_from_this<PeerSession>
+    {
+      public:
+        static constexpr std::size_t kControlMessageBufferSize = 4096;
+
+        enum class StatusValue : uint8_t
+        {
+            kConnecting = 0,
+            kConnected,
+            kDisconnected
+        };
+
+        PeerSession& operator=(const PeerSession&) { return *this; }
+
+        PeerSession() = delete;
+
+        PeerSession(bool is_inbound,
+                    const Config& cfg,
+                    const NodeInfo& node_info,
+                    std::string host,
+                    uint16_t port,
+                    Engine& manager);
+
+        ~PeerSession();
+
+        /// Dial the peer. Inbound sessions are already accepted.
+        void Connect();
+
+        /// Start the handshake after the session is stored by its id.
+        void Begin();
+
+        StatusValue Status();
+
+        /// Close the QUIC connection. Outbound sessions also stop their packet loop.
+        void Disconnect();
+
+        /// Inbound only. The connection was accepted by the server endpoint.
+        void SetConnection(std::shared_ptr<QuicConnection> connection);
+
+        /// Install callbacks. Called after the session is owned by the engine map.
+        void Attach(const std::shared_ptr<QuicConnection>& connection);
+
+        PeerSessionId GetSessionId() const { return connection_ ? connection_->Id() : 0; }
+
+        /// Accepted when this session was created for an inbound connection.
+        bool Inbound() const { return is_inbound_; }
+
+        /// Identity, role, status, and a fresh smoothed RTT.
+        PeerSnapshot Snapshot();
+
+        /// Control stream plus object streams received from this peer that have not closed.
+        std::uint64_t OpenLocalStreams() const;
+
+        /// Metric configured for this session. Zero when none was set.
+        std::uint64_t SessionMetric() const { return session_metric_.load(); }
+
+        /**
+         * @brief Metric written into advertisements on this session
+         *
+         * @details The session value is used only when it is greater than the node metric.
+         */
+        std::uint64_t AdvertisedMetric() const;
+
+        /// This node, with the metric for this session and an empty path.
+        NodeInfo LocalNodeAdvertisement() const;
+
+        /// Hop appended when this node forwards an advertisement on this session.
+        NodePathItem ForwardPathItem() const;
+
+        /// Store the session metric. The caller advertises again when the effective value changes.
+        void SetSessionMetric(std::uint64_t metric);
+
+        /// The QUIC connection is gone. Further callbacks from it are ignored.
+        void MarkDisconnected();
+
+        /// Record connect time the first time this attempt becomes connected.
+        void NoteConnected();
+
+        /// Drop subscribe and publish forwarding state held on this session.
+        void ClearLocalState();
+
+        /// Drop peer-to-peer forwarding state that arrived from peer_session_id.
+        void ForgetIngress(PeerSessionId peer_session_id);
+
+        std::shared_ptr<QuicStream> CreateStream(uint8_t priority) const;
+        /// Run fn on this session's QUIC thread. Another session's packet thread queues fn and returns.
+        void OnConnectionThread(std::function<void()> fn) const;
+
+        void CloseStream(const std::shared_ptr<QuicStream>& stream, StreamClose flag);
+
+        void FinishStream(const std::shared_ptr<QuicStream>& stream);
+        void SendNodeInfo(const NodeInfo& node_info, bool withdraw = false) const;
+        /**
+         * @param advance_seq  Origin refreshes must leave the stored sequence unchanged. A new sequence
+         *      is a subscribe update. Syncing an existing subscribe to a new peer is not one.
+         */
+        void SendSubscribeInfo(SubscribeInfo& subscribe_info, bool withdraw = false, bool advance_seq = true) const;
+        void SendAnnounceInfo(const AnnounceInfo& announce_info, bool withdraw = false);
+        void SendSns(const SubscribeNodeSet& sns, bool withdraw = false) const;
+
+        void SendData(uint8_t priority,
+                      uint32_t ttl,
+                      const std::shared_ptr<QuicStream>& stream,
+                      const SendFlags& eflags,
+                      std::shared_ptr<const std::vector<uint8_t>> data);
+
+        std::pair<SubscribeNodeSetId, bool> AddPeerSnsSourceNode(PeerSessionId in_peer_session_id,
+                                                                 SubscribeNodeSetId in_sns_id,
+                                                                 NodeIdValueType sub_node_id,
+                                                                 uint8_t priority);
+
+        std::pair<SubscribeNodeSetId, bool> AddSubscribeSourceNode(std::uint64_t full_name_hash,
+                                                                   NodeIdValueType sub_node_id,
+                                                                   uint8_t priority);
+
+        std::pair<bool, bool> RemoveSubscribeSourceNode(std::uint64_t full_name_hash, NodeIdValueType sub_node_id);
+
+        std::pair<bool, bool> RemovePeerSnsSourceNode(PeerSessionId in_peer_session_id,
+                                                      SubscribeNodeSetId in_sns_id,
+                                                      NodeIdValueType sub_node_id);
+
+        /// Subscriber nodes currently named by the subscribe SNS for this track. Empty when there is none.
+        std::vector<NodeIdValueType> SubscribeSourceNodes(std::uint64_t full_name_hash) const;
+
+        /// Egress SNS created for one ingress SNS. Empty when this session has none.
+        std::optional<SubscribeNodeSet> FindPeerSns(PeerSessionId in_peer_session_id,
+                                                    SubscribeNodeSetId in_sns_id) const;
+
+        void OnReady();
+        void OnTransportClosed();
+        void OnStream(uint64_t stream_id, bool bidirectional, std::vector<uint8_t> data, bool fin);
+        void OnDatagram(std::vector<uint8_t> data);
+        void OnStreamClosed(uint64_t stream_id, StreamClose flag);
+
+        struct PendingData
+        {
+            bool is_new_stream{ false };
+            uint64_t stream_id{ 0 };
+            DataHeader header;
+            std::shared_ptr<const std::vector<uint8_t>> data;
+            uint64_t data_offset{ 0 };
+            SendFlags flags;
+        };
+
+        /// Datagrams can arrive before the control message that creates their forwarding entry.
+        void StashPending(PendingData data);
+        std::vector<PendingData> TakePending(SubscribeNodeSetId sns_id);
+
+      private:
+        bool IsUsable() const { return connection_ != nullptr && !connection_closed_; }
+
+        void SendConnect();
+        void SendConnectOk() const;
+        SubscribeNodeSetId NextSnsId();
+        void SendControl(std::vector<uint8_t> msg) const;
+        void ProcessControlMessage();
+        bool ProcessReceivedData(std::uint64_t stream_id, std::shared_ptr<const std::vector<uint8_t>> data);
+        QuicConnection::Handlers Handlers();
+
+      public:
+        std::string peer_host_;
+        uint16_t peer_port_{ 0 };
+        const Config& config_;
+        const NodeInfo node_info_;
+        NodeInfo remote_node_info_;
+
+        struct Metrics
+        {
+            uint64_t srtt_us{ 0 };
+
+            /// Unix time in microseconds when this attempt became connected. Zero when it is not.
+            uint64_t connect_time_us{ 0 };
+        } metrics_;
+
+      private:
+        Engine& manager_;
+        StatusValue status_{ StatusValue::kConnecting };
+
+        bool is_inbound_{ false };
+        bool connection_closed_{ false };
+
+        /// Fabric-session metric. Zero leaves the node metric unchanged.
+        std::atomic<std::uint64_t> session_metric_{ 0 };
+
+        std::map<std::uint64_t, SubscribeNodeSet> sub_sns_;
+        std::map<std::pair<PeerSessionId, SubscribeNodeSetId>, SubscribeNodeSet> peer_sns_;
+        SubscribeNodeSetId last_sns_id_{ 0 };
+
+        std::shared_ptr<QuicStream> control_stream_;
+        std::optional<std::uint64_t> control_stream_id_;
+        std::atomic<bool> control_stream_open_{ false };
+        /// Object streams received from this peer that have not closed.
+        std::atomic<std::uint64_t> open_rx_streams_{ 0 };
+        std::vector<uint8_t> controL_msg_buffer_;
+        std::map<std::uint64_t, DataHeader> rx_stream_headers_;
+        std::map<std::uint64_t, std::vector<uint8_t>> rx_pending_;
+        std::map<SubscribeNodeSetId, std::vector<PendingData>> pending_data_;
+
+        std::shared_ptr<QuicConnection> connection_;
+    };
+
+} // namespace moq::fabric

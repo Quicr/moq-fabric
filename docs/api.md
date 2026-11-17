@@ -1,13 +1,13 @@
-# Peering library API
+# Fabric library API
 
-`moq-peering` is a C++ library for Media Over QUIC peering. An application such as LAPS implements MoQ and calls this API to forward names, subscribes, and objects between relays. The library speaks the peering protocol over QUIC. It does not open a MoQ session.
+`moq-fabric` is a C++ library for a Media Over QUIC relay fabric. An application such as LAPS implements MoQ and calls this API to forward names, subscribes, and objects between relays. The library speaks the fabric protocol over QUIC. It does not open a MoQ session.
 
 The public headers are:
 
-- `include/moq/peering/peer_manager.h`
-- `include/moq/peering/types.h`
+- `include/moq/fabric/peer_manager.h`
+- `include/moq/fabric/types.h`
 
-Everything below is in namespace `moq::peering`. The wire format is described in [relay-protocol.md](relay-protocol.md).
+Everything below is in namespace `moq::fabric`. The wire format is described in [relay-protocol.md](relay-protocol.md).
 
 ## Contents
 
@@ -27,15 +27,15 @@ Everything below is in namespace `moq::peering`. The wire format is described in
 
 ## Linking
 
-The library target is `moq::peering`. It requires C++20. Public dependencies are picoquic and spdlog.
+The library target is `moq::fabric`. It requires C++20. Public dependencies are picoquic and spdlog.
 
 ```cmake
-target_link_libraries(my_relay PRIVATE moq::peering)
+target_link_libraries(my_relay PRIVATE moq::fabric)
 target_compile_features(my_relay PRIVATE cxx_std_20)
 ```
 
 ```cpp
-#include <moq/peering/peer_manager.h>
+#include <moq/fabric/peer_manager.h>
 ```
 
 A standalone build fetches picoquic, and picoquic fetches picotls. OpenSSL is the TLS backend:
@@ -53,7 +53,7 @@ Pass certificate and key paths in configuration. Do not embed that material in s
 `PeerManager` owns the QUIC listener, outbound sessions, and forwarding tables. It is neither copyable nor movable.
 
 ```cpp
-moq::peering::PeerManager peers(config);
+moq::fabric::PeerManager peers(config);
 ```
 
 Construction starts the listener and dials every peer in `Config::peers`. Destruction stops the reconnect thread, drops sessions, and shuts down the endpoint.
@@ -107,7 +107,7 @@ struct Config {
 | `check_interval_ms` | How often disconnected outbound peers are dialed again. Values below `2000` are raised to `2000`. Default `5000`. |
 | `init_queue_size` | Accepted on `Config` and not read by the current library. |
 | `debug` | When true, peer sessions log extra subscriber-node-set detail. |
-| `logger` | spdlog logger. When empty, the library creates or reuses a color stderr logger named `moq-peering-` plus `node_id`. |
+| `logger` | spdlog logger. When empty, the library creates or reuses a color stderr logger named `moq-fabric-` plus `node_id`. |
 
 `NodeType` values:
 
@@ -117,13 +117,13 @@ struct Config {
 | `kEdge` | 1 | Relay that also has clients. |
 | `kStub` | 2 | Stub edge. |
 
-QUIC connections use the ALPN `moq-peering`. The transport does not configure a trust anchor, so the peer certificate is not validated. Relays with different certificates can still connect. Each node still presents the certificate loaded from `tls_cert_filename`.
+QUIC connections use the ALPN `moq-fabric`. The transport does not configure a trust anchor, so the peer certificate is not validated. Relays with different certificates can still connect. Each node still presents the certificate loaded from `tls_cert_filename`.
 
 ```cpp
-moq::peering::Config config;
+moq::fabric::Config config;
 config.node_id = "edge-sea-1";
-config.node_type = moq::peering::NodeType::kEdge;
-config.node_metric = moq::peering::kDefaultNodeMetric;
+config.node_type = moq::fabric::NodeType::kEdge;
+config.node_metric = moq::fabric::kDefaultNodeMetric;
 config.listen_port = 33440;
 config.peers = { { "10.1.2.3", 33434 } };
 config.tls_cert_filename = "/etc/moq/cert.pem";
@@ -131,7 +131,7 @@ config.tls_key_filename = "/etc/moq/key.pem";
 config.logger = spdlog::stdout_color_mt("edge-sea-1");
 config.logger->set_level(spdlog::level::info);
 
-moq::peering::PeerManager peers(config);
+moq::fabric::PeerManager peers(config);
 ```
 
 ## Peers and metrics
@@ -252,11 +252,11 @@ struct PeerSnapshot {
 
 ```cpp
 for (const auto& peer : peers.Peers()) {
-    if (peer.status != moq::peering::PeerLinkStatus::kConnected || !peer.identified) {
+    if (peer.status != moq::fabric::PeerLinkStatus::kConnected || !peer.identified) {
         continue;
     }
 
-    const auto remote = moq::peering::FormatNodeId(peer.node_id);
+    const auto remote = moq::fabric::FormatNodeId(peer.node_id);
     // remote, peer.contact, peer.srtt_us, peer.node_metric,
     // peer.subscribe_tracks, peer.publishes, peer.active_streams
 }
@@ -274,16 +274,16 @@ struct TrackName {
 ```
 
 ```cpp
-moq::peering::TrackName MakeTrack(std::string_view name_space, std::string_view track)
+moq::fabric::TrackName MakeTrack(std::string_view name_space, std::string_view track)
 {
-    moq::peering::TrackName name;
+    moq::fabric::TrackName name;
     name.name_space.push_back({ name_space.begin(), name_space.end() });
     name.name.assign(track.begin(), track.end());
     return name;
 }
 
 const auto camera = MakeTrack("demo", "camera-1");
-const auto track_hash = moq::peering::PeerManager::HashTrack(camera);
+const auto track_hash = moq::fabric::PeerManager::HashTrack(camera);
 ```
 
 `HashTrack` is the full-name hash used by `SendData`, `Unsubscribe`, `HasSubscribers`, and the delegate. The namespace hash is CityHash64 of the first tuple. Each following value is CityHash64 of the previous hash, written as 8 big-endian bytes, followed by the next tuple. An empty namespace hashes as CityHash64 of zero bytes. The name hash is CityHash64 of the name bytes. An empty name hashes as CityHash64 of zero bytes. Those two values are then combined. A namespace of one tuple is CityHash64 of that tuple, which matches LAPS with libquicr. Call `HashTrack` rather than recomputing it.
@@ -291,7 +291,7 @@ const auto track_hash = moq::peering::PeerManager::HashTrack(camera);
 A namespace may contain more than one tuple. Order is significant.
 
 ```cpp
-moq::peering::TrackName conference;
+moq::fabric::TrackName conference;
 conference.name_space.push_back({ 'r', 'o', 'o', 'm' });
 conference.name_space.push_back({ 's', 't', 'a', 'g', 'e' });
 conference.name = { 'v', 'i', 'd', 'e', 'o' };
@@ -307,13 +307,13 @@ void Withdraw(const TrackName& name, Announcement kind);
 `Announcement::kTrack` advertises one track. `Announcement::kNamespace` advertises a namespace that may cover many tracks. `Withdraw` is `Announce(..., true)`.
 
 ```cpp
-peers.Announce(camera, moq::peering::Announcement::kTrack);
+peers.Announce(camera, moq::fabric::Announcement::kTrack);
 
-moq::peering::TrackName room;
+moq::fabric::TrackName room;
 room.name_space.push_back({ 'd', 'e', 'm', 'o' });
-peers.Announce(room, moq::peering::Announcement::kNamespace);
+peers.Announce(room, moq::fabric::Announcement::kNamespace);
 
-peers.Withdraw(camera, moq::peering::Announcement::kTrack);
+peers.Withdraw(camera, moq::fabric::Announcement::kTrack);
 ```
 
 Use the same `Announcement` value on withdraw that was used on the original announce.
@@ -348,7 +348,7 @@ bool HasSubscribers(std::uint64_t track_hash) const;
 | `new_group_request_id` | Set only when the subscriber is asking for a new group. |
 
 ```cpp
-moq::peering::SubscribeParams params;
+moq::fabric::SubscribeParams params;
 params.priority = 10;
 params.delivery_timeout_ms = 1000;
 params.forward = 1;
@@ -369,7 +369,7 @@ peers.UpdateSubscribe(camera, params);
 `Unsubscribe` withdraws this node's subscribe. It does nothing when this node has no subscribe for that hash.
 
 ```cpp
-peers.Unsubscribe(moq::peering::PeerManager::HashTrack(camera));
+peers.Unsubscribe(moq::fabric::PeerManager::HashTrack(camera));
 ```
 
 `HasSubscribers` is true when the forwarding table still has at least one peer path for that full-name hash. A local `Subscribe` does not make it true. It becomes true on the node that is asked to publish, after a remote subscribe has been attached to a peer.
@@ -406,7 +406,7 @@ void EndSubgroup(std::uint64_t track_hash,
                  bool reset = false);
 ```
 
-`SendData` fans the object out to every peer subscribed to `track_hash`. With no subscribers the call does nothing. `data` must be non-null. The bytes are the object payload. The library adds the peering header.
+`SendData` fans the object out to every peer subscribed to `track_hash`. With no subscribers the call does nothing. `data` must be non-null. The bytes are the object payload. The library adds the fabric header.
 
 `SendData` acts on three types:
 
@@ -418,7 +418,7 @@ void EndSubgroup(std::uint64_t track_hash,
 
 `kControlSignaling`, `kFetchNewStream`, and `kFetchExistingStream` are present on the enumeration and are not selected by `SendData`.
 
-`priority` is the QUIC priority of a stream created by `kNewStream`. `ttl_ms` is the object time to live in milliseconds, carried on the peering header.
+`priority` is the QUIC priority of a stream created by `kNewStream`. `ttl_ms` is the object time to live in milliseconds, carried on the fabric header.
 
 A subgroup is one QUIC stream. The first object on a `(group_id, subgroup_id)` pair uses `kNewStream`. Later objects on that pair use `kExistingStream`. A new group or subgroup starts another stream. `EndSubgroup` finishes that stream. `reset == false` sends FIN after bytes already queued. `reset == true` resets the stream.
 
@@ -431,7 +431,7 @@ auto payload = std::make_shared<std::vector<uint8_t>>(
 peers.SendData(track_hash,
                /*priority=*/10,
                /*ttl_ms=*/1000,
-               moq::peering::DataType::kDatagram,
+               moq::fabric::DataType::kDatagram,
                /*group_id=*/0,
                /*subgroup_id=*/0,
                std::move(payload));
@@ -446,8 +446,8 @@ constexpr uint64_t kSubgroup = 0;
 auto first = std::make_shared<const std::vector<uint8_t>>(std::vector<uint8_t>{ 0x01 });
 auto rest = std::make_shared<const std::vector<uint8_t>>(std::vector<uint8_t>{ 0x02, 0x03 });
 
-peers.SendData(track_hash, 10, 1000, moq::peering::DataType::kNewStream, kGroup, kSubgroup, first);
-peers.SendData(track_hash, 10, 1000, moq::peering::DataType::kExistingStream, kGroup, kSubgroup, rest);
+peers.SendData(track_hash, 10, 1000, moq::fabric::DataType::kNewStream, kGroup, kSubgroup, first);
+peers.SendData(track_hash, 10, 1000, moq::fabric::DataType::kExistingStream, kGroup, kSubgroup, rest);
 peers.EndSubgroup(track_hash, kGroup, kSubgroup, /*reset=*/false);
 ```
 
@@ -505,16 +505,16 @@ Every method has an empty default. Override the ones the application handles.
 `OnPeerData` is delivered only for a full-name hash this node has subscribed to.
 
 ```cpp
-class RelayApp : public moq::peering::Delegate {
+class RelayApp : public moq::fabric::Delegate {
   public:
-    explicit RelayApp(moq::peering::PeerManager& peers)
+    explicit RelayApp(moq::fabric::PeerManager& peers)
       : peers_(peers)
     {
     }
 
-    void OnPeerSubscribe(const moq::peering::TrackName&,
+    void OnPeerSubscribe(const moq::fabric::TrackName&,
                      std::uint64_t track_hash,
-                     const moq::peering::SubscribeParams& params) override
+                     const moq::fabric::SubscribeParams& params) override
     {
         if (!publishes(track_hash)) {
             return;
@@ -524,7 +524,7 @@ class RelayApp : public moq::peering::Delegate {
         peers_.SendData(track_hash,
                         params.priority,
                         1000,
-                        moq::peering::DataType::kDatagram,
+                        moq::fabric::DataType::kDatagram,
                         0,
                         0,
                         std::move(payload));
@@ -549,7 +549,7 @@ class RelayApp : public moq::peering::Delegate {
     void OnPeerDown(std::uint64_t session_id) override { note_session(session_id, false); }
 
   private:
-    moq::peering::PeerManager& peers_;
+    moq::fabric::PeerManager& peers_;
 
     bool publishes(std::uint64_t) const;
     std::vector<uint8_t> current_object(std::uint64_t) const;
@@ -562,16 +562,16 @@ class RelayApp : public moq::peering::Delegate {
 };
 ```
 
-`publishes`, `current_object`, and the other helpers stand for the application's own MoQ session. The peering library does not call them.
+`publishes`, `current_object`, and the other helpers stand for the application's own MoQ session. This library does not call them.
 
 ## Two relays, one object
 
-This is the flow covered by `test/peering_integration.cc`. One process runs the relay nodes. They announce, subscribe, and exchange datagrams. No MoQ session is opened. The same file also covers a three-relay chain whose middle node is a via, and a stub that dials an edge while a second edge dials that same parent.
+This is the flow covered by `test/fabric_integration.cc`. One process runs the relay nodes. They announce, subscribe, and exchange datagrams. No MoQ session is opened. The same file also covers a three-relay chain whose middle node is a via, and a stub that dials an edge while a second edge dials that same parent.
 
 ```cpp
-moq::peering::TrackName DemoTrack()
+moq::fabric::TrackName DemoTrack()
 {
-    moq::peering::TrackName name;
+    moq::fabric::TrackName name;
     const std::string name_space = "demo";
     const std::string track = "object";
     name.name_space.push_back({ name_space.begin(), name_space.end() });
@@ -579,17 +579,17 @@ moq::peering::TrackName DemoTrack()
     return name;
 }
 
-class Publisher : public moq::peering::Delegate {
+class Publisher : public moq::fabric::Delegate {
   public:
-    explicit Publisher(moq::peering::PeerManager& peers)
+    explicit Publisher(moq::fabric::PeerManager& peers)
       : peers_(peers)
-      , track_hash_(moq::peering::PeerManager::HashTrack(DemoTrack()))
+      , track_hash_(moq::fabric::PeerManager::HashTrack(DemoTrack()))
     {
     }
 
-    void OnPeerSubscribe(const moq::peering::TrackName&,
+    void OnPeerSubscribe(const moq::fabric::TrackName&,
                      std::uint64_t track_hash,
-                     const moq::peering::SubscribeParams&) override
+                     const moq::fabric::SubscribeParams&) override
     {
         if (track_hash != track_hash_) {
             return;
@@ -597,30 +597,30 @@ class Publisher : public moq::peering::Delegate {
 
         auto payload = std::make_shared<std::vector<uint8_t>>(
             std::vector<uint8_t>{ 'p', 'e', 'e', 'r' });
-        peers_.SendData(track_hash, 10, 1000, moq::peering::DataType::kDatagram, 1, 0, std::move(payload));
+        peers_.SendData(track_hash, 10, 1000, moq::fabric::DataType::kDatagram, 1, 0, std::move(payload));
     }
 
   private:
-    moq::peering::PeerManager& peers_;
+    moq::fabric::PeerManager& peers_;
     std::uint64_t track_hash_;
 };
 
-moq::peering::Config PublisherConfig(const std::string& cert, const std::string& key)
+moq::fabric::Config PublisherConfig(const std::string& cert, const std::string& key)
 {
-    moq::peering::Config config;
+    moq::fabric::Config config;
     config.node_id = "1:1";
-    config.node_type = moq::peering::NodeType::kEdge;
+    config.node_type = moq::fabric::NodeType::kEdge;
     config.listen_port = 33440;
     config.tls_cert_filename = cert;
     config.tls_key_filename = key;
     return config;
 }
 
-moq::peering::Config SubscriberConfig(const std::string& cert, const std::string& key)
+moq::fabric::Config SubscriberConfig(const std::string& cert, const std::string& key)
 {
-    moq::peering::Config config;
+    moq::fabric::Config config;
     config.node_id = "1:2";
-    config.node_type = moq::peering::NodeType::kEdge;
+    config.node_type = moq::fabric::NodeType::kEdge;
     config.listen_port = 33441;
     config.peers = { { "127.0.0.1", 33440 } };
     config.tls_cert_filename = cert;
@@ -632,16 +632,16 @@ void Run(const std::string& cert, const std::string& key)
 {
     const auto track = DemoTrack();
 
-    moq::peering::PeerManager publisher_node(PublisherConfig(cert, key));
+    moq::fabric::PeerManager publisher_node(PublisherConfig(cert, key));
     Publisher publisher(publisher_node);
     publisher_node.SetDelegate(&publisher);
-    publisher_node.Announce(track, moq::peering::Announcement::kTrack);
+    publisher_node.Announce(track, moq::fabric::Announcement::kTrack);
 
-    moq::peering::PeerManager subscriber_node(SubscriberConfig(cert, key));
+    moq::fabric::PeerManager subscriber_node(SubscriberConfig(cert, key));
     Subscriber subscriber; // implements OnPeerData and waits for the four bytes
     subscriber_node.SetDelegate(&subscriber);
 
-    moq::peering::SubscribeParams params;
+    moq::fabric::SubscribeParams params;
     params.priority = 10;
     params.delivery_timeout_ms = 1000;
     params.forward = 1;
@@ -664,14 +664,14 @@ Sequence:
 4. The subscriber's subscribe is sent. The publisher's `OnPeerSubscribe` runs and calls `SendData`.
 5. The subscriber's `OnPeerData` receives `{ 'p', 'e', 'e', 'r' }`.
 
-The integration cases live in `moq_peering_test`:
+The integration cases live in `moq_fabric_test`:
 
 - two edge relays peer and exchange a publish, a subscribe, and one datagram in each direction
 - three relays in a chain, the middle one a via, exchange publishes and subscribes in both directions
 - a stub dials an edge, a second edge dials that parent, and the stub and the far edge exchange publishes and subscribes
 
 ```sh
-cmake --build build --target moq_peering_test
+cmake --build build --target moq_fabric_test
 ctest --test-dir build -R "relays" --output-on-failure
 ```
 
@@ -679,7 +679,7 @@ ctest --test-dir build -R "relays" --output-on-failure
 
 [examples.md](examples.md) is the guide for the three binaries and a walkthrough of the API calls each one makes.
 
-`moq_peering_relay` forwards announces, subscribes, and objects. `--type` selects `edge`, `via`, or `stub`. `moq_peering_producer` dials a relay as a stub, announces one track, and calls `SendData` from `OnPeerSubscribe`. `moq_peering_subscriber` dials a relay as a stub, calls `Subscribe`, and prints bytes from `OnPeerData`.
+`moq_fabric_relay` forwards announces, subscribes, and objects. `--type` selects `edge`, `via`, or `stub`. `moq_fabric_producer` dials a relay as a stub, announces one track, and calls `SendData` from `OnPeerSubscribe`. `moq_fabric_subscriber` dials a relay as a stub, calls `Subscribe`, and prints bytes from `OnPeerData`.
 
 Pass certificate and key paths. `make cert` writes a development pair under `build/`. The programs read that pair from disk. They reject an expired, not-yet-valid, weak, or MD5/SHA-1 certificate. A self-signed P-256 certificate signed with SHA-256 is reported and accepted for these local examples.
 
@@ -691,7 +691,7 @@ An outbound host that does not resolve is logged as `Failed to connect to peer`,
 
 ```cpp
 try {
-    moq::peering::PeerManager peers(config);
+    moq::fabric::PeerManager peers(config);
     peers.SetDelegate(&app);
 } catch (const std::exception& ex) {
     // Construction failed. The manager was not created.

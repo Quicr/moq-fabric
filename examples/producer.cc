@@ -14,16 +14,16 @@
 
 namespace {
 
-    class ProducerApp : public moq::peering::Delegate
+    class ProducerApp : public moq::fabric::Delegate
     {
       public:
         ProducerApp(std::shared_ptr<spdlog::logger> logger,
-                    moq::peering::TrackName track,
+                    moq::fabric::TrackName track,
                     std::string payload,
                     std::chrono::milliseconds interval)
           : logger_(std::move(logger))
           , track_(std::move(track))
-          , track_hash_(moq::peering::PeerManager::HashTrack(track_))
+          , track_hash_(moq::fabric::PeerManager::HashTrack(track_))
           , payload_(std::move(payload))
           , interval_(interval)
         {
@@ -31,7 +31,7 @@ namespace {
 
         ~ProducerApp() { Stop(); }
 
-        void Attach(moq::peering::PeerManager& peers) { peers_ = &peers; }
+        void Attach(moq::fabric::PeerManager& peers) { peers_ = &peers; }
 
         void Start()
         {
@@ -52,9 +52,9 @@ namespace {
             peers_ = nullptr;
         }
 
-        void OnPeerSubscribe(const moq::peering::TrackName&,
+        void OnPeerSubscribe(const moq::fabric::TrackName&,
                              std::uint64_t track_hash,
-                             const moq::peering::SubscribeParams& params) override
+                             const moq::fabric::SubscribeParams& params) override
         {
             if (track_hash != track_hash_) {
                 return;
@@ -97,7 +97,7 @@ namespace {
       private:
         void PublishOne()
         {
-            moq::peering::PeerManager* peers = nullptr;
+            moq::fabric::PeerManager* peers = nullptr;
             uint8_t priority = 10;
             uint64_t group = 0;
             std::shared_ptr<const std::vector<uint8_t>> payload;
@@ -115,7 +115,7 @@ namespace {
             }
 
             peers->SendData(
-              track_hash_, priority, 1000, moq::peering::DataType::kDatagram, group, 0, std::move(payload));
+              track_hash_, priority, 1000, moq::fabric::DataType::kDatagram, group, 0, std::move(payload));
             logger_->info("sent datagram group {}", group);
         }
 
@@ -149,14 +149,14 @@ namespace {
         }
 
         std::shared_ptr<spdlog::logger> logger_;
-        moq::peering::TrackName track_;
+        moq::fabric::TrackName track_;
         std::uint64_t track_hash_;
         std::string payload_;
         std::chrono::milliseconds interval_;
 
         std::mutex mu_;
         std::condition_variable cv_;
-        moq::peering::PeerManager* peers_{ nullptr };
+        moq::fabric::PeerManager* peers_{ nullptr };
         bool stop_{ false };
         bool publishing_{ false };
         uint8_t priority_{ 10 };
@@ -170,23 +170,23 @@ namespace {
 int
 main(int argc, char** argv)
 {
-    using moq::peering::examples::ExampleKind;
+    using moq::fabric::examples::ExampleKind;
 
     try {
-        const auto options = moq::peering::examples::ParseArgs(ExampleKind::kProducer, argc, argv);
+        const auto options = moq::fabric::examples::ParseArgs(ExampleKind::kProducer, argc, argv);
         if (options.common.help) {
-            std::cout << moq::peering::examples::HelpText(ExampleKind::kProducer);
+            std::cout << moq::fabric::examples::HelpText(ExampleKind::kProducer);
             return 0;
         }
 
-        moq::peering::examples::CheckCertificate(options.common.cert, options.common.key);
-        auto logger = moq::peering::examples::MakeLogger(options.common.node_id);
-        const auto track = moq::peering::examples::MakeTrack(options.name_space, options.track);
+        moq::fabric::examples::CheckCertificate(options.common.cert, options.common.key);
+        auto logger = moq::fabric::examples::MakeLogger(options.common.node_id);
+        const auto track = moq::fabric::examples::MakeTrack(options.name_space, options.track);
 
         ProducerApp app(logger, track, options.payload, std::chrono::milliseconds(options.interval_ms));
 
         // Declared after the manager so Stop() joins the publish thread while the manager is still alive.
-        moq::peering::PeerManager peers(moq::peering::examples::MakeConfig(options.common, logger));
+        moq::fabric::PeerManager peers(moq::fabric::examples::MakeConfig(options.common, logger));
         struct StopPublisher
         {
             ProducerApp& app;
@@ -196,18 +196,18 @@ main(int argc, char** argv)
         app.Attach(peers);
         app.Start();
         peers.SetDelegate(&app);
-        peers.Announce(track, moq::peering::Announcement::kTrack);
+        peers.Announce(track, moq::fabric::Announcement::kTrack);
         logger->info("producing {} as stub, listening on {}",
-                     moq::peering::examples::FormatTrack(track),
+                     moq::fabric::examples::FormatTrack(track),
                      options.common.listen_port);
 
-        moq::peering::examples::WaitForInterrupt();
+        moq::fabric::examples::WaitForInterrupt();
         logger->info("stopping");
         peers.SetDelegate(nullptr);
         spdlog::drop(logger->name());
     } catch (const std::exception& ex) {
         std::cerr << ex.what() << '\n';
-        std::cerr << moq::peering::examples::HelpText(ExampleKind::kProducer);
+        std::cerr << moq::fabric::examples::HelpText(ExampleKind::kProducer);
         return 1;
     }
     return 0;

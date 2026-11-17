@@ -17,24 +17,24 @@ if(NOT DEFINED doctest_SOURCE_DIR)
 endif()
 include("${doctest_SOURCE_DIR}/scripts/cmake/doctest.cmake")
 
-add_executable(moq_peering_test
+add_executable(moq_fabric_test
     main.cc
-    peering_node.cc
-    peering_connect.cc
-    peering_subscribe.cc
-    peering_announce.cc
-    peering_sns.cc
-    peering_data_header.cc
-    peering_info_base.cc
-    peering_integration.cc
-    peering_name.cc
+    fabric_node.cc
+    fabric_connect.cc
+    fabric_subscribe.cc
+    fabric_announce.cc
+    fabric_sns.cc
+    fabric_data_header.cc
+    fabric_info_base.cc
+    fabric_integration.cc
+    fabric_name.cc
 )
-target_include_directories(moq_peering_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src)
-target_link_libraries(moq_peering_test PRIVATE moq-peering doctest::doctest OpenSSL::Crypto)
-set_target_properties(moq_peering_test PROPERTIES
+target_include_directories(moq_fabric_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src)
+target_link_libraries(moq_fabric_test PRIVATE moq-fabric doctest::doctest OpenSSL::Crypto)
+set_target_properties(moq_fabric_test PROPERTIES
     CXX_STANDARD 20
     CXX_STANDARD_REQUIRED YES
     CXX_EXTENSIONS OFF
 )
 
-doctest_discover_tests(moq_peering_test)
+doctest_discover_tests(moq_fabric_test)

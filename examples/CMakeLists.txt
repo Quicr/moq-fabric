@@ -6,14 +6,14 @@ if(APPLE AND NOT OPENSSL_ROOT_DIR AND EXISTS "/opt/homebrew/opt/openssl@3")
 endif()
 find_package(OpenSSL REQUIRED)
 
-set(MOQ_PEERING_EXAMPLES moq_peering_relay moq_peering_producer moq_peering_subscriber)
+set(MOQ_FABRIC_EXAMPLES moq_fabric_relay moq_fabric_producer moq_fabric_subscriber)
 
-add_executable(moq_peering_relay relay.cc example_util.cc)
-add_executable(moq_peering_producer producer.cc example_util.cc)
-add_executable(moq_peering_subscriber subscriber.cc example_util.cc)
+add_executable(moq_fabric_relay relay.cc example_util.cc)
+add_executable(moq_fabric_producer producer.cc example_util.cc)
+add_executable(moq_fabric_subscriber subscriber.cc example_util.cc)
 
-foreach(example IN LISTS MOQ_PEERING_EXAMPLES)
-    target_link_libraries(${example} PRIVATE moq-peering OpenSSL::Crypto)
+foreach(example IN LISTS MOQ_FABRIC_EXAMPLES)
+    target_link_libraries(${example} PRIVATE moq-fabric OpenSSL::Crypto)
     target_compile_features(${example} PRIVATE cxx_std_20)
     target_compile_options(${example}
         PRIVATE

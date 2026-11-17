@@ -22,7 +22,7 @@
 #include <sys/stat.h>
 #endif
 
-namespace moq::peering::examples {
+namespace moq::fabric::examples {
     namespace {
 
         volatile std::sig_atomic_t g_stop = 0;
@@ -136,7 +136,7 @@ namespace moq::peering::examples {
     {
         switch (kind) {
             case ExampleKind::kRelay:
-                return "moq_peering_relay --cert FILE --key FILE [--node-id ID] [--type edge|via|stub]\n"
+                return "moq_fabric_relay --cert FILE --key FILE [--node-id ID] [--type edge|via|stub]\n"
                        "                  [--listen PORT] [--peer HOST:PORT]...\n"
                        "\n"
                        "Forwards announces, subscribes, and objects. It does not publish or subscribe.\n"
@@ -150,7 +150,7 @@ namespace moq::peering::examples {
                        "  --listen PORT     UDP port (default 33434)\n"
                        "  --peer HOST:PORT  Relay to dial. Repeat for more than one.\n";
             case ExampleKind::kProducer:
-                return "moq_peering_producer --cert FILE --key FILE --peer HOST:PORT\n"
+                return "moq_fabric_producer --cert FILE --key FILE --peer HOST:PORT\n"
                        "                     [--node-id ID] [--listen PORT]\n"
                        "                     [--namespace TEXT] [--track TEXT]\n"
                        "                     [--interval-ms N] [--payload TEXT]\n"
@@ -168,7 +168,7 @@ namespace moq::peering::examples {
                        "  --interval-ms N     Milliseconds between later objects (default 1000)\n"
                        "  --payload TEXT      Object text. A sequence number is appended (default hello)\n";
             case ExampleKind::kSubscriber:
-                return "moq_peering_subscriber --cert FILE --key FILE --peer HOST:PORT\n"
+                return "moq_fabric_subscriber --cert FILE --key FILE --peer HOST:PORT\n"
                        "                       [--node-id ID] [--listen PORT]\n"
                        "                       [--namespace TEXT] [--track TEXT]\n"
                        "\n"
@@ -223,22 +223,22 @@ namespace moq::peering::examples {
                 options.common.peers.push_back(ParsePeer(NeedValue(i, argc, argv, "--peer")));
             } else if (arg == "--type") {
                 if (kind != ExampleKind::kRelay) {
-                    throw std::runtime_error("--type is only for moq_peering_relay");
+                    throw std::runtime_error("--type is only for moq_fabric_relay");
                 }
                 options.common.node_type = ParseNodeType(NeedValue(i, argc, argv, "--type"));
             } else if (arg == "--namespace") {
                 if (kind == ExampleKind::kRelay) {
-                    throw std::runtime_error("--namespace is not used by moq_peering_relay");
+                    throw std::runtime_error("--namespace is not used by moq_fabric_relay");
                 }
                 options.name_space = NeedValue(i, argc, argv, "--namespace");
             } else if (arg == "--track") {
                 if (kind == ExampleKind::kRelay) {
-                    throw std::runtime_error("--track is not used by moq_peering_relay");
+                    throw std::runtime_error("--track is not used by moq_fabric_relay");
                 }
                 options.track = NeedValue(i, argc, argv, "--track");
             } else if (arg == "--interval-ms") {
                 if (kind != ExampleKind::kProducer) {
-                    throw std::runtime_error("--interval-ms is only for moq_peering_producer");
+                    throw std::runtime_error("--interval-ms is only for moq_fabric_producer");
                 }
                 const auto text = NeedValue(i, argc, argv, "--interval-ms");
                 std::size_t used = 0;
@@ -254,7 +254,7 @@ namespace moq::peering::examples {
                 options.interval_ms = static_cast<int>(value);
             } else if (arg == "--payload") {
                 if (kind != ExampleKind::kProducer) {
-                    throw std::runtime_error("--payload is only for moq_peering_producer");
+                    throw std::runtime_error("--payload is only for moq_fabric_producer");
                 }
                 options.payload = NeedValue(i, argc, argv, "--payload");
             } else {
@@ -403,4 +403,4 @@ namespace moq::peering::examples {
         }
     }
 
-} // namespace moq::peering::examples
+} // namespace moq::fabric::examples

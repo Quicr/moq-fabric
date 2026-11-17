@@ -1,13 +1,13 @@
 // SPDX-FileCopyrightText: Copyright (c) 2024 Cisco Systems
 // SPDX-License-Identifier: BSD-2-Clause
 
-#include <moq/peering/peer_manager.h>
+#include <moq/fabric/peer_manager.h>
 
-#include "peering/engine.h"
-#include "peering/messages/node_info.h"
-#include "peering/name.h"
+#include "fabric/engine.h"
+#include "fabric/messages/node_info.h"
+#include "fabric/name.h"
 
-namespace moq::peering {
+namespace moq::fabric {
     std::string FormatNodeId(std::uint64_t id)
     {
         return NodeId().Value(id);
@@ -113,4 +113,4 @@ namespace moq::peering {
         return TrackHash(name).track_fullname_hash;
     }
 
-} // namespace moq::peering
+} // namespace moq::fabric

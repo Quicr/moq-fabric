@@ -1,20 +1,20 @@
-# moq-peering
+# moq-fabric
 
-[![Ubuntu](https://img.shields.io/github/actions/workflow/status/Quicr/moq-peering/ubuntu.yml?branch=main&label=Ubuntu)](https://github.com/Quicr/moq-peering/actions/workflows/ubuntu.yml)
-[![MacOS](https://img.shields.io/github/actions/workflow/status/Quicr/moq-peering/macos.yml?branch=main&label=MacOS)](https://github.com/Quicr/moq-peering/actions/workflows/macos.yml)
-[![Windows](https://img.shields.io/github/actions/workflow/status/Quicr/moq-peering/windows.yml?branch=main&label=Windows)](https://github.com/Quicr/moq-peering/actions/workflows/windows.yml)
+[![Ubuntu](https://img.shields.io/github/actions/workflow/status/Quicr/moq-fabric/ubuntu.yml?branch=main&label=Ubuntu)](https://github.com/Quicr/moq-fabric/actions/workflows/ubuntu.yml)
+[![MacOS](https://img.shields.io/github/actions/workflow/status/Quicr/moq-fabric/macos.yml?branch=main&label=MacOS)](https://github.com/Quicr/moq-fabric/actions/workflows/macos.yml)
+[![Windows](https://img.shields.io/github/actions/workflow/status/Quicr/moq-fabric/windows.yml?branch=main&label=Windows)](https://github.com/Quicr/moq-fabric/actions/workflows/windows.yml)
 
-C++ library for Media Over QUIC peering. Relays use it to peer with each other over QUIC and forward track names, subscribes, and objects. The library implements the peering protocol. It does not implement Media Over QUIC (MoQ). An application such as [LAPS](https://github.com/Quicr/laps) implements MoQ and uses this library.
+C++ library for a Media Over QUIC relay fabric. Relays use it to peer with each other over QUIC and forward track names, subscribes, and objects. The library implements the fabric protocol. It does not implement Media Over QUIC (MoQ). An application such as [LAPS](https://github.com/Quicr/laps) implements MoQ and uses this library.
 
 ## Documentation
 
 - [API](docs/api.md) — `PeerManager`, `Delegate`, peer admin, and session stats
-- [Examples](docs/examples.md) — `moq_peering_relay`, `moq_peering_producer`, and `moq_peering_subscriber`, and how each one uses the API
-- [Peering protocol](docs/relay-protocol.md) — relay-to-relay wire protocol for Media Over QUIC peering
+- [Examples](docs/examples.md) — `moq_fabric_relay`, `moq_fabric_producer`, and `moq_fabric_subscriber`, and how each one uses the API
+- [Fabric protocol](docs/relay-protocol.md) — relay-to-relay wire protocol
 
 ## API
 
-`moq::peering::PeerManager` is the entry point.
+`moq::fabric::PeerManager` is the entry point.
 
 Methods the application calls:
 
@@ -28,7 +28,7 @@ Methods the application calls:
 - `Peers` returns each accepted and dialed session, including smoothed RTT, metrics, subscribe and publish counts, and open streams
 - `LocalNodeId` is the numeric id assigned from `node_id` at startup. `FormatNodeId` prints it as `high.high:low.low`
 
-`moq::peering::Delegate` is the callback interface. Peering invokes it when a peer subscribes, withdraws,
+`moq::fabric::Delegate` is the callback interface. The library invokes it when a peer subscribes, withdraws,
 announces, delivers an object, or connects and disconnects. LAPS implements the delegate and translates
 those events into MoQ.
 
@@ -42,12 +42,12 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-`test/peering_integration.cc` runs relays in one process. Two edges exchange a publish, a subscribe, and a datagram in each direction. A second case puts a via between two edges. A third case attaches a stub to an edge and exchanges with a far edge through that parent. None of them open a MoQ session.
+`test/fabric_integration.cc` runs relays in one process. Two edges exchange a publish, a subscribe, and a datagram in each direction. A second case puts a via between two edges. A third case attaches a stub to an edge and exchanges with a far edge through that parent. None of them open a MoQ session.
 
 Those tests generate a short-lived self-signed P-256 certificate, check that it is currently valid and signed with SHA-256, and delete the key when the test ends. Do not embed certificate or key material in source.
 
-From LAPS, the library is added with CPM. A checkout at `../moq-peering` is used when it is present.
-Otherwise CPM fetches `quicr/moq-peering`.
+From LAPS, the library is added with CPM. A checkout at `../moq-fabric` is used when it is present.
+Otherwise CPM fetches `quicr/moq-fabric`.
 
 ## Examples
 
@@ -55,10 +55,10 @@ Otherwise CPM fetches `quicr/moq-peering`.
 
 ```sh
 make cert
-cmake --build build --target moq_peering_relay moq_peering_producer moq_peering_subscriber
-./build/examples/moq_peering_relay --cert build/server-cert.pem --key build/server-key.pem --listen 33434
-./build/examples/moq_peering_producer --cert build/server-cert.pem --key build/server-key.pem --peer 127.0.0.1:33434
-./build/examples/moq_peering_subscriber --cert build/server-cert.pem --key build/server-key.pem --peer 127.0.0.1:33434
+cmake --build build --target moq_fabric_relay moq_fabric_producer moq_fabric_subscriber
+./build/examples/moq_fabric_relay --cert build/server-cert.pem --key build/server-key.pem --listen 33434
+./build/examples/moq_fabric_producer --cert build/server-cert.pem --key build/server-key.pem --peer 127.0.0.1:33434
+./build/examples/moq_fabric_subscriber --cert build/server-cert.pem --key build/server-key.pem --peer 127.0.0.1:33434
 ```
 
 `make cert` writes a self-signed P-256 certificate signed with SHA-256 under `build/`. The examples read those files, check validity, key strength, and signature, and accept the self-signed pair for local use. Certificate bytes stay out of source.

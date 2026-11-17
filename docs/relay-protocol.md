@@ -1,8 +1,8 @@
-# Peering protocol
+# Fabric protocol
 
-This is the relay-to-relay protocol implemented by `moq-peering`. Relays exchange reachability, announcements, subscribes, and objects over one QUIC session. An application such as [LAPS](https://github.com/Quicr/laps) implements Media Over QUIC and calls the library. The library does not open a MoQ session.
+This is the relay-to-relay protocol implemented by `moq-fabric`. Relays exchange reachability, announcements, subscribes, and objects over one QUIC session. An application such as [LAPS](https://github.com/Quicr/laps) implements Media Over QUIC and calls the library. The library does not open a MoQ session.
 
-The application API is [api.md](api.md). Integer fields below are big-endian except the node-path record, which is copied in native byte order. `varint` is the variable-length integer in `src/peering/uintvar.h`. A length from 0 through 63 is a single byte equal to that length.
+The application API is [api.md](api.md). Integer fields below are big-endian except the node-path record, which is copied in native byte order. `varint` is the variable-length integer in `src/fabric/uintvar.h`. A length from 0 through 63 is a single byte equal to that length.
 
 ## Contents
 
@@ -46,7 +46,7 @@ These behaviors are outside the current library:
 
 ## Transport
 
-QUIC connections use the ALPN `moq-peering`. Each node presents the certificate and key loaded from the paths in its configuration. The endpoint does not configure a trust anchor, so the peer certificate is not validated. Certificate and key bytes stay in those files.
+QUIC connections use the ALPN `moq-fabric`. Each node presents the certificate and key loaded from the paths in its configuration. The endpoint does not configure a trust anchor, so the peer certificate is not validated. Certificate and key bytes stay in those files.
 
 The dialing node opens one bidirectional stream at priority 0 and sends `CONNECT` on it. The accepting node treats that bidirectional stream as the control stream and answers with `CONNECT_RESPONSE`. Later control messages use the same stream. An inbound bidirectional stream replaces the control stream the session will write.
 
@@ -196,7 +196,7 @@ Objects that arrive before the SNS is known are held on the session and forwarde
 
 ## Objects
 
-An object is the application payload plus a peering header on a datagram and on the first bytes of a unidirectional stream. Later bytes on that stream have no peering header. The payload is not a MoQ message. The library does not parse it.
+An object is the application payload plus a fabric header on a datagram and on the first bytes of a unidirectional stream. Later bytes on that stream have no fabric header. The payload is not a MoQ message. The library does not parse it.
 
 `group_id` and `subgroup_id` are not on the wire. The sender uses the pair to choose which local stream to write. The next hop maps that ingress stream to one egress stream.
 
@@ -210,7 +210,7 @@ An object is the application payload plus a peering header on a datagram and on 
 
 `ttl` is milliseconds and is carried on a new stream. `priority` is the QUIC priority of a stream this node opens.
 
-On fan-out of a datagram or a new stream, the SNS id at byte offset 2 is replaced with the egress SNS id. The rest of the datagram, and the rest of a stream, is copied through. The local subscriber receives the payload with the peering header removed.
+On fan-out of a datagram or a new stream, the SNS id at byte offset 2 is replaced with the egress SNS id. The rest of the datagram, and the rest of a stream, is copied through. The local subscriber receives the payload with the fabric header removed.
 
 A datagram is delivered with `is_new_stream` false and no stream id. The first object on a QUIC stream is delivered with `is_new_stream` true. `OnPeerStreamClosed` follows when that stream ends. `reset` is true when the peer reset it.
 
@@ -376,7 +376,7 @@ SUBSCRIBE_NODE_SET_WD {
 
 ### Data header
 
-A datagram and the start of a stream begin with `header_len`, which counts every byte of the peering header, including itself. The payload starts at that offset. There is no separate payload length. A datagram ends at the QUIC datagram. A stream continues until the peer finishes or resets it.
+A datagram and the start of a stream begin with `header_len`, which counts every byte of the fabric header, including itself. The payload starts at that offset. There is no separate payload length. A datagram ends at the QUIC datagram. A stream continues until the peer finishes or resets it.
 
 ```text
 DATA_DATAGRAM {
@@ -414,7 +414,7 @@ Later objects on that stream are payload bytes only.
 sequenceDiagram
     participant A as Dialer
     participant B as Acceptor
-    A->>B: QUIC handshake, ALPN moq-peering
+    A->>B: QUIC handshake, ALPN moq-fabric
     A->>B: Open bidirectional stream
     A->>B: CONNECT(mode=Both, node=A, path=[])
     B->>A: CONNECT_RESPONSE(code=0, node=B, path=[])
