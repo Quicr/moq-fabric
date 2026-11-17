@@ -90,6 +90,10 @@ namespace moq::fabric {
          */
         bool AddSubscribe(const SubscribeInfo& subscribe_info);
 
+        /// True when this advertisement is the subscribe already installed for that source.
+        /// A restarted session replays that advertisement. An older sequence is not live.
+        bool IsLiveSubscribe(const SubscribeInfo& subscribe_info) const;
+
         /**
          * @brief Remove subscribe from the info base
          *

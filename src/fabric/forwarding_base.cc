@@ -250,6 +250,25 @@ namespace moq::fabric {
         return true;
     }
 
+    bool ForwardingBase::IsLiveSubscribe(const SubscribeInfo& subscribe_info) const
+    {
+        std::lock_guard _(mutex_);
+
+        const auto hash = subscribe_info.track.fullname_hash;
+        const auto source = subscribe_info.track.source_node_id;
+        const auto track = subscribes_.find(hash);
+        if (track == subscribes_.end() || !track->second.contains(source)) {
+            return false;
+        }
+
+        const auto mark = subscribe_seq_.find({ hash, source });
+        if (mark == subscribe_seq_.end() || mark->second.withdrawn) {
+            return false;
+        }
+
+        return mark->second.epoch == subscribe_info.details.epoch && mark->second.seq == subscribe_info.details.seq;
+    }
+
     bool ForwardingBase::RemoveSubscribe(const SubscribeInfo& subscribe_info, bool force)
     {
         std::lock_guard _(mutex_);

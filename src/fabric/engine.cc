@@ -222,20 +222,28 @@ namespace moq::fabric {
 
         const auto is_updated = withdraw ? info_base_->RemoveSubscribe(subscribe_info, ignore_sequence)
                                          : info_base_->AddSubscribe(subscribe_info);
+        // A restarted session replays the current sequence while the old session is still up.
+        // The sequence is not newer, and dropping it leaves the publisher subscribed to a session
+        // that is about to go away. An older sequence is still ignored.
+        const bool live_replay = !is_updated && !withdraw && info_base_->IsLiveSubscribe(subscribe_info);
 
-        if (!is_updated) {
+        if (!is_updated && !live_replay) {
             // Equal or older than the stored sequence. A delayed update must not change forwarding.
             return;
         }
 
-        for (const auto& sess : client_peer_sessions_) {
-            if (peer_session_id != sess.first)
-                sess.second->SendSubscribeInfo(subscribe_info, withdraw);
-        }
+        if (is_updated) {
+            for (const auto& sess : client_peer_sessions_) {
+                if (peer_session_id != sess.first)
+                    sess.second->SendSubscribeInfo(subscribe_info, withdraw);
+            }
 
-        for (const auto& sess : server_peer_sessions_) {
-            if (peer_session_id != sess.first)
-                sess.second->SendSubscribeInfo(subscribe_info, withdraw);
+            for (const auto& sess : server_peer_sessions_) {
+                if (peer_session_id != sess.first)
+                    sess.second->SendSubscribeInfo(subscribe_info, withdraw);
+            }
+        } else {
+            RelayLiveSubscribe(peer_session_id, subscribe_info);
         }
 
         /*
@@ -284,7 +292,7 @@ namespace moq::fabric {
 
             // A restored session sends the same subscribe again. The record is not new, but the
             // forwarding path is, and the publisher has to start sending onto it.
-            if (is_updated || path_ready) {
+            if (is_updated || path_ready || live_replay) {
                 if (auto* delegate = LoadDelegate()) {
                     SPDLOG_LOGGER_DEBUG(LOGGER,
                                         "Notifying delegate of subscribe fullname: {} new_group_request: {}",
@@ -465,8 +473,6 @@ namespace moq::fabric {
                     delegate->OnPeerDown(peer_session_id);
                 }
 
-                PropagateNodeInfo(remote_node_info, true);
-
                 // Identify the session by pointer. A dialer drops its QUIC connection before this
                 // runs, so GetSessionId() is already 0 and cannot be matched against the tables.
                 std::shared_ptr<PeerSession> dying;
@@ -515,10 +521,10 @@ namespace moq::fabric {
                     SubscribeInfoReceived(peer_session_id, si, true, true);
                 }
 
+                // purged.nodes is every node this session was the last path to, including the
+                // peer that just disconnected. A replacement session keeps the node out of this
+                // list, so the withdraw is not sent over a route that is already back.
                 for (const auto& node : purged.nodes) {
-                    if (node.id == remote_node_info.id) {
-                        continue;
-                    }
                     PropagateNodeInfo(node, true);
                 }
 
@@ -1778,6 +1784,32 @@ namespace moq::fabric {
             SaveSubscribeSequenceFile(path, rows);
         } catch (const std::exception&) {
             // The in-memory sequence still works for this process.
+        }
+    }
+
+    void Engine::RelayLiveSubscribe(PeerSessionId from, SubscribeInfo& subscribe_info)
+    {
+        const auto hash = subscribe_info.details.track_hash.track_fullname_hash;
+        const auto subscriber = subscribe_info.track.source_node_id;
+
+        std::vector<NodeIdValueType> publishers;
+        if (const auto announced = info_base_->announces_.find(hash); announced != info_base_->announces_.end()) {
+            publishers.reserve(announced->second.size());
+            for (const auto& [source, _] : announced->second) {
+                // This node is the publisher, or the subscriber is echoing its own track.
+                if (source == node_info_.id || source == subscriber || source == 0) {
+                    continue;
+                }
+                publishers.push_back(source);
+            }
+        }
+
+        for (const auto publisher : publishers) {
+            const auto next = info_base_->GetBestPeerSession(publisher).lock();
+            if (!next || next->GetSessionId() == 0 || next->GetSessionId() == from) {
+                continue;
+            }
+            next->SendSubscribeInfo(subscribe_info, false);
         }
     }
 

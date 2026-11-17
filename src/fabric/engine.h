@@ -119,6 +119,10 @@ namespace moq::fabric {
         void SaveSubscribeSequences();
         /// Drops subscribes for a source that left the node table and forwards the withdrawal.
         void ForwardWithdrawnSource(PeerSessionId from, NodeIdValueType source);
+
+        /// Forwards a same-sequence subscribe toward the track publisher. One hop, so a mesh
+        /// does not circulate the replay. The publisher notifies its delegate and stops.
+        void RelayLiveSubscribe(PeerSessionId from, SubscribeInfo& subscribe_info);
         bool CreatePeerSession(const std::string& host,
                                uint16_t port,
                                std::optional<std::uint64_t> metric = std::nullopt);
