@@ -220,7 +220,7 @@ Order in `main`:
 4. `Attach` stores the manager pointer the callback will use.
 5. Start the publish thread. It waits until a subscribe arrives.
 6. `SetDelegate`.
-7. `Announce(track, Announcement::kTrack)`.
+7. `Announce(track, Announcement::kTrack, Encoding::kMoqt18)`.
 
 `Announce` records the track and sends it on sessions that are already up. A session that connects later receives the stored announce during handshake sync. That is why the producer can announce immediately after `SetDelegate`, including when the dial has not finished.
 

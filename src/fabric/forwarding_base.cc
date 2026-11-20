@@ -489,25 +489,38 @@ namespace moq::fabric {
     {
         std::lock_guard _(mutex_);
 
-        auto [__, is_new] =
-          announces_[announce_info.track.fullname_hash].emplace(announce_info.track.source_node_id, announce_info);
+        // Bit 0 of flags is the namespace. An empty track name has the same hash as that namespace.
+        const uint8_t kind = (announce_info.details.flags & 1) != 0 ? 0x1 : 0x2;
+        auto& by_source = announces_[announce_info.track.fullname_hash];
+        auto existing = by_source.find(announce_info.track.source_node_id);
+        if (existing != by_source.end()) {
+            if ((existing->second.details.kinds & kind) != 0) {
+                return false;
+            }
+            existing->second.details.kinds |= kind;
+            return true;
+        }
 
-        if (is_new) {
-            for (const auto& prefix_hash : PrefixHashNamespaceTuples(announce_info.track.name_space)) {
-                auto it = prefix_lookup_announces_.find(prefix_hash);
-                if (it == prefix_lookup_announces_.end()) {
-                    prefix_lookup_announces_.emplace(prefix_hash, std::set{ announce_info.track.fullname_hash });
-                } else {
-                    auto& hash_set = it->second;
-                    if (auto s_it = hash_set.find(announce_info.track.fullname_hash); s_it == hash_set.end()) {
-                        hash_set.emplace(announce_info.track.fullname_hash);
-                    }
+        auto [stored, is_new] = by_source.emplace(announce_info.track.source_node_id, announce_info);
+        stored->second.details.kinds = kind;
+        if (!is_new) {
+            return false;
+        }
+
+        for (const auto& prefix_hash : PrefixHashNamespaceTuples(announce_info.track.name_space)) {
+            auto it = prefix_lookup_announces_.find(prefix_hash);
+            if (it == prefix_lookup_announces_.end()) {
+                prefix_lookup_announces_.emplace(prefix_hash, std::set{ announce_info.track.fullname_hash });
+            } else {
+                auto& hash_set = it->second;
+                if (auto s_it = hash_set.find(announce_info.track.fullname_hash); s_it == hash_set.end()) {
+                    hash_set.emplace(announce_info.track.fullname_hash);
                 }
             }
         }
         // TODO: If not new, update metrics in existing entry
 
-        return is_new;
+        return true;
     }
 
     bool ForwardingBase::RemoveAnnounce(const AnnounceInfo& announce_info)
@@ -517,6 +530,17 @@ namespace moq::fabric {
 
         auto anno_it = announces_.find(announce_info.track.fullname_hash);
         if (anno_it != announces_.end()) {
+            const uint8_t kind = (announce_info.details.flags & 1) != 0 ? 0x1 : 0x2;
+            auto source = anno_it->second.find(announce_info.track.source_node_id);
+            if (source == anno_it->second.end() || (source->second.details.kinds & kind) == 0) {
+                return false;
+            }
+            source->second.details.kinds &= static_cast<uint8_t>(~kind);
+            if (source->second.details.kinds != 0) {
+                // The other kind still uses this hash. Keep the prefix index.
+                return true;
+            }
+
             std::vector<uint64_t> remove_prefix_hashes;
 
             for (const auto& prefix_hash : PrefixHashNamespaceTuples(announce_info.track.name_space)) {

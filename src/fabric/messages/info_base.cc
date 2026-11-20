@@ -188,13 +188,24 @@ namespace moq::fabric {
             it += name_size;
         }
 
+        if (it == serialized_data.end()) {
+            throw std::invalid_argument("announce info missing flags");
+        }
         details.flags = *it++;
+        if (it == serialized_data.end()) {
+            throw std::invalid_argument("announce info missing encoding");
+        }
+        const auto encoding = *it++;
+        if (!IsEncoding(encoding)) {
+            throw std::invalid_argument("announce info encoding is not a known MoQT draft");
+        }
+        details.encoding = static_cast<Encoding>(encoding);
     }
 
     template<>
     uint32_t AnnounceInfo::SizeBytes() const
     {
-        return sizeof(track.source_node_id) + sizeof(track.fullname_hash) + NameSize(track) + 1;
+        return sizeof(track.source_node_id) + sizeof(track.fullname_hash) + NameSize(track) + 2;
     }
 
     template<>
@@ -212,6 +223,7 @@ namespace moq::fabric {
         Append(data, track.fullname_hash);
         AppendName(data, track);
         data.push_back(details.flags);
+        data.push_back(static_cast<uint8_t>(details.encoding));
         return data;
     }
 }

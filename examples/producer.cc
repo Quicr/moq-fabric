@@ -196,7 +196,7 @@ main(int argc, char** argv)
         app.Attach(peers);
         app.Start();
         peers.SetDelegate(&app);
-        peers.Announce(track, moq::fabric::Announcement::kTrack);
+        peers.Announce(track, moq::fabric::Announcement::kTrack, moq::fabric::Encoding::kMoqt18);
         logger->info("producing {} as stub, listening on {}",
                      moq::fabric::examples::FormatTrack(track),
                      options.common.listen_port);

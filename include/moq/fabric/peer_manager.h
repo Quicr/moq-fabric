@@ -36,11 +36,15 @@ namespace moq::fabric {
         void SetDelegate(Delegate* delegate);
 
         /**
-         * @brief Advertise or withdraw a track or namespace
+         * @brief Advertise a track or namespace
+         *
+         * @param encoding  MoQT draft of this publish. A publisher has one encoding. A later announce
+         *      of the same name from this node does not replace it.
          */
-        void Announce(const TrackName& name, Announcement kind, bool withdraw = false);
+        void Announce(const TrackName& name, Announcement kind, Encoding encoding);
 
-        void Withdraw(const TrackName& name, Announcement kind) { Announce(name, kind, true); }
+        /// Withdraw a track or namespace. The encoding already stored for that publish is sent.
+        void Withdraw(const TrackName& name, Announcement kind);
 
         void Subscribe(const TrackName& name, const SubscribeParams& params);
         void UpdateSubscribe(const TrackName& name, const SubscribeParams& params);

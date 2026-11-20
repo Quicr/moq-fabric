@@ -132,7 +132,7 @@ Two namespaces share a prefix when every tuple hash of the shorter one equals th
 
 ## Announcements
 
-An announcement advertises one track or one namespace. The originating node sets `source_node_id` to itself. Bit 0 of `flags` is set for a namespace and clear for a track.
+An announcement advertises one track or one namespace. The originating node sets `source_node_id` to itself. Bit 0 of `flags` is set for a namespace and clear for a track. `encoding` is the publisher's MoQT draft: 16, 18, 22, or 23. A source keeps the first encoding stored for that name. An empty track name has the same hash as its namespace, and both announcements are delivered.
 
 There is no sequence number. A receiver stores the announcement by full-name hash and source. The same pair is not forwarded again. A withdraw removes that pair. A withdraw for a pair that is not stored is not forwarded.
 
@@ -338,7 +338,7 @@ NAME {
 
 ### Announce information
 
-Types 8 and 9 use the same body. A withdraw uses type 9. Bit 0 of `flags` is 1 for a namespace and 0 for a track.
+Types 8 and 9 use the same body. A withdraw uses type 9. Bit 0 of `flags` is 1 for a namespace and 0 for a track. `encoding` is the draft number 16, 18, 22, or 23.
 
 ```text
 ANNOUNCE_INFO {
@@ -348,6 +348,7 @@ ANNOUNCE_INFO {
     fullname_hash(8),
     NAME,
     flags(1),
+    encoding(1),
 }
 ```
 

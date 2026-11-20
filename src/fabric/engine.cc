@@ -113,6 +113,32 @@ namespace moq::fabric {
             info.details.seq =
               info.details.seq < 0xFFFF ? static_cast<uint16_t>(info.details.seq + 1) : static_cast<uint16_t>(0);
         }
+
+        // One stored announce can carry both kinds. An empty track name hashes the same as its
+        // namespace, and the record keeps the flags of whichever arrived first. A peer that connects
+        // later has to be sent each kind. The track goes first so a peer that keeps only the first
+        // message still has somewhere to deliver objects.
+        std::vector<AnnounceInfo> AnnounceMessages(const AnnounceInfo& stored)
+        {
+            uint8_t kinds = stored.details.kinds;
+            if (kinds == 0) {
+                kinds = (stored.details.flags & 1) != 0 ? static_cast<uint8_t>(0x1) : static_cast<uint8_t>(0x2);
+            }
+
+            std::vector<AnnounceInfo> messages;
+            messages.reserve(2);
+            if ((kinds & 0x2) != 0) {
+                auto track = stored;
+                track.details.flags = static_cast<uint8_t>(track.details.flags & static_cast<uint8_t>(~1));
+                messages.push_back(std::move(track));
+            }
+            if ((kinds & 0x1) != 0) {
+                auto name_space = stored;
+                name_space.details.flags = static_cast<uint8_t>(name_space.details.flags | 1);
+                messages.push_back(std::move(name_space));
+            }
+            return messages;
+        }
     }
 
     // ------------------------------------------------------------
@@ -257,7 +283,12 @@ namespace moq::fabric {
 
             const auto priority = subscribe_info.details.priority;
             auto bp_it = info_base_->nodes_best_.find(subscribe_info.track.source_node_id);
-            if (bp_it != info_base_->nodes_best_.end()) {
+            if (bp_it == info_base_->nodes_best_.end()) {
+                SPDLOG_LOGGER_INFO(LOGGER,
+                                   "No route yet to subscriber source_node: {} for fullname: {}",
+                                   NodeId().Value(subscribe_info.track.source_node_id),
+                                   subscribe_info.details.track_hash.track_fullname_hash);
+            } else {
                 const auto best_session = bp_it->second.lock();
                 if (best_session) {
                     SPDLOG_LOGGER_DEBUG(
@@ -396,17 +427,32 @@ namespace moq::fabric {
         auto th = TrackHash(announce_info.track.name_space, announce_info.track.name);
         SPDLOG_LOGGER_INFO(LOGGER,
                            "Announce info received peer_session_id: {} namespace hash: {} name hash: {} fullname hash: "
-                           "{} == {} withdraw: {} flags: {}",
+                           "{} == {} withdraw: {} flags: {} encoding: {}",
                            peer_session_id,
                            th.track_namespace_hash,
                            th.track_name_hash,
                            th.track_fullname_hash,
                            announce_info.track.fullname_hash,
                            withdraw,
-                           static_cast<int>(announce_info.details.flags));
+                           static_cast<int>(announce_info.details.flags),
+                           static_cast<int>(announce_info.details.encoding));
 
         auto peer_session = GetPeerSession(peer_session_id);
         if (not withdraw && !info_base_->AddAnnounce(announce_info)) {
+            // A publisher has one encoding. The first announce keeps it.
+            std::lock_guard lock(info_base_->mutex_);
+            const auto stored = info_base_->announces_.find(announce_info.track.fullname_hash);
+            if (stored != info_base_->announces_.end()) {
+                const auto source = stored->second.find(announce_info.track.source_node_id);
+                if (source != stored->second.end() &&
+                    source->second.details.encoding != announce_info.details.encoding) {
+                    SPDLOG_LOGGER_WARN(LOGGER,
+                                       "Ignoring announce encoding {} for fullname: {}; publisher already uses {}",
+                                       static_cast<int>(announce_info.details.encoding),
+                                       announce_info.track.fullname_hash,
+                                       static_cast<int>(source->second.details.encoding));
+                }
+            }
             // Don't send to other peers if we have seen this before (loop)
             return;
         }
@@ -442,9 +488,9 @@ namespace moq::fabric {
         if (auto* delegate = LoadDelegate()) {
             const auto name = ToTrackName(announce_info.track.name_space, announce_info.track.name);
             if (announce_info.details.flags & 1) {
-                delegate->OnPeerNamespace(name.name_space, withdraw);
+                delegate->OnPeerNamespace(name.name_space, announce_info.details.encoding, withdraw);
             } else {
-                delegate->OnPeerTrack(name, withdraw);
+                delegate->OnPeerTrack(name, announce_info.details.encoding, withdraw);
             }
         }
 
@@ -1137,7 +1183,7 @@ namespace moq::fabric {
         SaveSubscribeSequences();
     }
 
-    void Engine::Announce(const TrackName& track_name, Announcement kind, bool withdraw)
+    void Engine::Announce(const TrackName& track_name, Announcement kind, Encoding encoding, bool withdraw)
     {
         std::lock_guard lock(info_base_->mutex_);
         const auto track_full_name = ToFullName(track_name);
@@ -1151,6 +1197,24 @@ namespace moq::fabric {
 
         auto th = TrackHash(track_full_name);
         ai.track.fullname_hash = th.track_fullname_hash;
+
+        if (const auto stored = info_base_->announces_.find(th.track_fullname_hash);
+            stored != info_base_->announces_.end()) {
+            if (const auto source = stored->second.find(node_info_.id); source != stored->second.end()) {
+                if (!withdraw && source->second.details.encoding != encoding) {
+                    SPDLOG_LOGGER_WARN(LOGGER,
+                                       "Ignoring announce encoding {} for fullname: {}; publisher already uses {}",
+                                       static_cast<int>(encoding),
+                                       th.track_fullname_hash,
+                                       static_cast<int>(source->second.details.encoding));
+                    return;
+                }
+                if (withdraw) {
+                    encoding = source->second.details.encoding;
+                }
+            }
+        }
+        ai.details.encoding = encoding;
 
         if (not withdraw) {
             info_base_->AddAnnounce(ai);
@@ -1526,7 +1590,9 @@ namespace moq::fabric {
                 if (peer_session.remote_node_info_.id == anno_info.track.source_node_id)
                     continue; // Skip, don't send self or remote to self
 
-                peer_session.SendAnnounceInfo(anno_info);
+                for (const auto& message : AnnounceMessages(anno_info)) {
+                    peer_session.SendAnnounceInfo(message);
+                }
             }
         }
 

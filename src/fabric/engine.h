@@ -57,7 +57,7 @@ namespace moq::fabric {
                              uint64_t data_offset,
                              SendFlags eflags);
 
-        void Announce(const TrackName& name, Announcement kind, bool withdraw = false);
+        void Announce(const TrackName& name, Announcement kind, Encoding encoding, bool withdraw = false);
         void Subscribe(const TrackName& name, const SubscribeParams& params);
         void UpdateSubscribe(const TrackName& name, const SubscribeParams& params);
         void Unsubscribe(uint64_t track_fullname_hash);

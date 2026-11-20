@@ -6,6 +6,8 @@
 #include "fabric/common.h"
 #include "fabric/name.h"
 
+#include <moq/fabric/types.h>
+
 #include <optional>
 #include <span>
 #include <vector>
@@ -49,10 +51,17 @@ namespace moq::fabric {
      * @brief Fields that exist only on an announce
      *
      * @details Bit 0 of flags selects the announcement. Set means a namespace, clear means a track.
+     *      `encoding` is the publisher's MoQT draft. Announce bytes are node, one hash, the name,
+     *      flags, then encoding.
      */
     struct AnnounceDetails
     {
         uint8_t flags{ 0 };
+        Encoding encoding{ Encoding::kMoqt18 };
+        // Local record of which kinds have been delivered for this hash. Bit 0 is the namespace,
+        // bit 1 is the track. An empty track name hashes the same as its namespace, so both kinds
+        // have to be kept. This byte is not written on the wire.
+        uint8_t kinds{ 0 };
     };
 
     /**
@@ -60,7 +69,7 @@ namespace moq::fabric {
      *
      * @details The track identity is the same for both kinds. Details and the wire encoding stay with the kind.
      *      Subscribe bytes are epoch, sequence, node, three hashes, parameters, then the name. Announce bytes are node,
-     *      one hash, the name, then flags.
+     *      one hash, the name, flags, then the encoding draft.
      */
     template<typename Details>
     struct InfoBase

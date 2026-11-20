@@ -36,6 +36,29 @@ namespace moq::fabric {
     };
 
     /**
+     * @brief MoQT draft used to encode objects for one publish
+     *
+     * @details A publisher has one encoding. `Announce` records it for the namespace or track, and
+     *      every object for that publish uses it. The wire value is the draft number.
+     */
+    enum class Encoding : uint8_t
+    {
+        kMoqt16 = 16,
+        kMoqt18 = 18,
+        kMoqt22 = 22,
+        kMoqt23 = 23,
+    };
+
+    /// True when `value` is one of the encoding drafts.
+    inline bool IsEncoding(std::uint8_t value)
+    {
+        return value == static_cast<std::uint8_t>(Encoding::kMoqt16) ||
+               value == static_cast<std::uint8_t>(Encoding::kMoqt18) ||
+               value == static_cast<std::uint8_t>(Encoding::kMoqt22) ||
+               value == static_cast<std::uint8_t>(Encoding::kMoqt23);
+    }
+
+    /**
      * @brief How an object is carried between relays
      */
     enum class DataType : uint8_t
@@ -134,17 +157,21 @@ namespace moq::fabric {
             (void)subscribers_remain;
         }
 
-        /// A peer announced or withdrew a namespace.
-        virtual void OnPeerNamespace(const std::vector<std::vector<uint8_t>>& name_space, bool withdrawn)
+        /// A peer announced or withdrew a namespace. `encoding` is the publisher's object draft.
+        virtual void OnPeerNamespace(const std::vector<std::vector<uint8_t>>& name_space,
+                                     Encoding encoding,
+                                     bool withdrawn)
         {
             (void)name_space;
+            (void)encoding;
             (void)withdrawn;
         }
 
-        /// A peer announced or withdrew a track.
-        virtual void OnPeerTrack(const TrackName& name, bool withdrawn)
+        /// A peer announced or withdrew a track. `encoding` is the publisher's object draft.
+        virtual void OnPeerTrack(const TrackName& name, Encoding encoding, bool withdrawn)
         {
             (void)name;
+            (void)encoding;
             (void)withdrawn;
         }
 

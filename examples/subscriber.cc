@@ -24,7 +24,7 @@ namespace {
 
         void OnPeerDown(std::uint64_t session_id) override { logger_->info("peer down session {}", session_id); }
 
-        void OnPeerTrack(const moq::fabric::TrackName& name, bool withdrawn) override
+        void OnPeerTrack(const moq::fabric::TrackName& name, moq::fabric::Encoding, bool withdrawn) override
         {
             if (name.name != track_.name || name.name_space != track_.name_space) {
                 return;

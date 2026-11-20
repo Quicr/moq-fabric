@@ -300,23 +300,23 @@ conference.name = { 'v', 'i', 'd', 'e', 'o' };
 ## Announcements
 
 ```cpp
-void Announce(const TrackName& name, Announcement kind, bool withdraw = false);
+void Announce(const TrackName& name, Announcement kind, Encoding encoding);
 void Withdraw(const TrackName& name, Announcement kind);
 ```
 
-`Announcement::kTrack` advertises one track. `Announcement::kNamespace` advertises a namespace that may cover many tracks. `Withdraw` is `Announce(..., true)`.
+`Announcement::kTrack` advertises one track. `Announcement::kNamespace` advertises a namespace that may cover many tracks. `Encoding` is the MoQT draft of that publish: `kMoqt16`, `kMoqt18`, `kMoqt22`, or `kMoqt23`. A publisher has one encoding. A later announce of the same name from this node does not replace it. `Withdraw` sends the encoding stored with the publish.
 
 ```cpp
-peers.Announce(camera, moq::fabric::Announcement::kTrack);
+peers.Announce(camera, moq::fabric::Announcement::kTrack, moq::fabric::Encoding::kMoqt18);
 
 moq::fabric::TrackName room;
 room.name_space.push_back({ 'd', 'e', 'm', 'o' });
-peers.Announce(room, moq::fabric::Announcement::kNamespace);
+peers.Announce(room, moq::fabric::Announcement::kNamespace, moq::fabric::Encoding::kMoqt18);
 
 peers.Withdraw(camera, moq::fabric::Announcement::kTrack);
 ```
 
-Use the same `Announcement` value on withdraw that was used on the original announce.
+Use the same `Announcement` value on withdraw that was used on the original announce. Objects for the publish are encoded with the announced draft.
 
 When this node announces, every remote subscribe whose namespace is a prefix of the announced namespace (or the other way around) is reported again through `Delegate::OnPeerSubscribe`. Tuple hashes are compared in order. A shorter namespace matches when every tuple it has equals the other namespace.
 
@@ -472,8 +472,10 @@ class Delegate {
 
     virtual void OnPeerUnsubscribe(std::uint64_t track_hash, bool subscribers_remain);
 
-    virtual void OnPeerNamespace(const std::vector<std::vector<uint8_t>>& name_space, bool withdrawn);
-    virtual void OnPeerTrack(const TrackName& name, bool withdrawn);
+    virtual void OnPeerNamespace(const std::vector<std::vector<uint8_t>>& name_space,
+                                 Encoding encoding,
+                                 bool withdrawn);
+    virtual void OnPeerTrack(const TrackName& name, Encoding encoding, bool withdrawn);
 
     virtual void OnPeerData(std::uint64_t track_hash,
                         bool is_new_stream,
@@ -495,8 +497,8 @@ Every method has an empty default. Override the ones the application handles.
 | --- | --- |
 | `OnPeerSubscribe` | A peer subscribed to `name`. `track_hash` is the value to pass to `SendData` and `HasSubscribers`. Also runs when a local announce matches a subscribe already known. |
 | `OnPeerUnsubscribe` | That peered subscribe was withdrawn. `subscribers_remain` is true when some other peer still wants the track. |
-| `OnPeerNamespace` | A peer announced or withdrew a namespace. `withdrawn` is true on withdraw. |
-| `OnPeerTrack` | A peer announced or withdrew one track. |
+| `OnPeerNamespace` | A peer announced or withdrew a namespace. `encoding` is the publisher's MoQT draft. `withdrawn` is true on withdraw. |
+| `OnPeerTrack` | A peer announced or withdrew one track. `encoding` is the publisher's MoQT draft. |
 | `OnPeerData` | Object bytes for a name this node subscribed to. |
 | `OnPeerStreamClosed` | The peer closed the stream that carried objects for `track_hash`. |
 | `OnPeerUp` | An outbound or accepted session finished its handshake. `session_id` identifies that QUIC connection. |
@@ -635,7 +637,7 @@ void Run(const std::string& cert, const std::string& key)
     moq::fabric::PeerManager publisher_node(PublisherConfig(cert, key));
     Publisher publisher(publisher_node);
     publisher_node.SetDelegate(&publisher);
-    publisher_node.Announce(track, moq::fabric::Announcement::kTrack);
+    publisher_node.Announce(track, moq::fabric::Announcement::kTrack, moq::fabric::Encoding::kMoqt18);
 
     moq::fabric::PeerManager subscriber_node(SubscriberConfig(cert, key));
     Subscriber subscriber; // implements OnPeerData and waits for the four bytes

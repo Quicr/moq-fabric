@@ -35,9 +35,16 @@ namespace moq::fabric {
         impl_->engine.SetDelegate(delegate);
     }
 
-    void PeerManager::Announce(const TrackName& name, Announcement kind, bool withdraw)
+    void PeerManager::Announce(const TrackName& name, Announcement kind, Encoding encoding)
     {
-        impl_->engine.Announce(name, kind, withdraw);
+        impl_->engine.Announce(name, kind, encoding, false);
+    }
+
+    void PeerManager::Withdraw(const TrackName& name, Announcement kind)
+    {
+        // The engine sends the encoding stored with the publish. This value is used only when
+        // that publish is already gone, so the withdraw message still carries a known draft.
+        impl_->engine.Announce(name, kind, Encoding::kMoqt18, true);
     }
 
     void PeerManager::Subscribe(const TrackName& name, const SubscribeParams& params)

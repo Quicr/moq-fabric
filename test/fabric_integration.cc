@@ -351,7 +351,7 @@ namespace {
                 std::lock_guard lock(app_.mu);
                 app_.published[hash] = std::move(payload);
             }
-            node_->Announce(name, Announcement::kTrack);
+            node_->Announce(name, Announcement::kTrack, Encoding::kMoqt18);
         }
 
         void Subscribe(const TrackName& name)
@@ -592,7 +592,7 @@ namespace {
                 cv.notify_all();
             }
 
-            void OnPeerTrack(const TrackName& name, bool withdrawn) override
+            void OnPeerTrack(const TrackName& name, Encoding, bool withdrawn) override
             {
                 {
                     std::lock_guard lock(mu);
